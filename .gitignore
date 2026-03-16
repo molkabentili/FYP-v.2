@@ -1,0 +1,17 @@
+# ── Node / Frontend build artifacts ──────────────────────────
+node_modules/
+dist/
+
+# Vite cache
+.vite/
+
+# ── Environment / secrets ─────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── OS / Editor ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+.vscode/settings.json
