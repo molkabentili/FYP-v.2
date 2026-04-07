@@ -1,0 +1,14 @@
+real_datasets:
+  - name: telco_churn
+    path: data/real/telco_churn.csv
+  - name: telco_churn_engineered
+    path: data/real/telco_churn_engineered.csv
+  - name: online_retail
+    path: data/real/online_retail.csv
+
+synthetic_scenarios:
+  - name: synthetic_telecom_stress
+    rows: 4000
+    features: 10
+    clusters: 4
+    missing_ratio: 0.12

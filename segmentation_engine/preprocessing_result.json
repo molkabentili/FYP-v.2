@@ -1,0 +1,437 @@
+{
+  "inspect": {
+    "dataset": "data/synthetic/SmartSeg_Synthetic_v1.csv",
+    "summary": {
+      "rows": 5150,
+      "columns": 34,
+      "dtypes": {
+        "ts_start": "str",
+        "duration_ms": "str",
+        "user_id_hash": "str",
+        "user_session_hash": "str",
+        "language": "str",
+        "tier": "str",
+        "next_tier": "str",
+        "app_section": "str",
+        "app_event": "str",
+        "choice_action": "str",
+        "availability_result": "str",
+        "loyalty_balance": "int64",
+        "purchase_eligibility": "str",
+        "api_endpoint": "str",
+        "offer_name": "str",
+        "offer_value": "str",
+        "partner_link": "str",
+        "payment_source": "str",
+        "action_result": "str",
+        "amount_TND": "float64",
+        "amount_GO": "str",
+        "status_result": "str",
+        "status_code": "str",
+        "technical_flag": "int64",
+        "internal_error_code": "str",
+        "transaction_note": "str",
+        "engagement_action": "str",
+        "features": "str",
+        "banners": "str",
+        "client_agent": "str",
+        "smartphone_type": "str",
+        "source_file": "str",
+        "product_name": "str",
+        "offer_category": "str"
+      }
+    },
+    "schema": {
+      "all_columns": [
+        "ts_start",
+        "duration_ms",
+        "user_id_hash",
+        "user_session_hash",
+        "language",
+        "tier",
+        "next_tier",
+        "app_section",
+        "app_event",
+        "choice_action",
+        "availability_result",
+        "loyalty_balance",
+        "purchase_eligibility",
+        "api_endpoint",
+        "offer_name",
+        "offer_value",
+        "partner_link",
+        "payment_source",
+        "action_result",
+        "amount_TND",
+        "amount_GO",
+        "status_result",
+        "status_code",
+        "technical_flag",
+        "internal_error_code",
+        "transaction_note",
+        "engagement_action",
+        "features",
+        "banners",
+        "client_agent",
+        "smartphone_type",
+        "source_file",
+        "product_name",
+        "offer_category"
+      ],
+      "numeric_columns": [
+        "loyalty_balance",
+        "amount_TND",
+        "technical_flag"
+      ],
+      "categorical_columns": [
+        "ts_start",
+        "duration_ms",
+        "user_id_hash",
+        "user_session_hash",
+        "language",
+        "tier",
+        "next_tier",
+        "app_section",
+        "app_event",
+        "choice_action",
+        "availability_result",
+        "purchase_eligibility",
+        "api_endpoint",
+        "offer_name",
+        "offer_value",
+        "partner_link",
+        "payment_source",
+        "action_result",
+        "amount_GO",
+        "status_result",
+        "status_code",
+        "internal_error_code",
+        "transaction_note",
+        "engagement_action",
+        "features",
+        "banners",
+        "client_agent",
+        "smartphone_type",
+        "source_file",
+        "product_name",
+        "offer_category"
+      ],
+      "id_like_columns": [],
+      "high_missing_columns": [
+        "partner_link",
+        "internal_error_code",
+        "payment_source",
+        "engagement_action",
+        "amount_TND",
+        "offer_category",
+        "product_name",
+        "amount_GO",
+        "offer_value",
+        "offer_name",
+        "availability_result"
+      ],
+      "column_missing_ratio": {
+        "partner_link": 0.9450485436893203,
+        "internal_error_code": 0.896504854368932,
+        "payment_source": 0.8306796116504854,
+        "engagement_action": 0.736116504854369,
+        "amount_TND": 0.7007766990291262,
+        "offer_category": 0.6031067961165049,
+        "product_name": 0.6031067961165049,
+        "amount_GO": 0.6031067961165049,
+        "offer_value": 0.6031067961165049,
+        "offer_name": 0.6031067961165049,
+        "availability_result": 0.42330097087378643,
+        "transaction_note": 0.25844660194174757,
+        "features": 0.2506796116504854,
+        "banners": 0.1978640776699029,
+        "choice_action": 0.1436893203883495,
+        "ts_start": 0.021359223300970873,
+        "duration_ms": 0.007184466019417476,
+        "status_code": 0.0033009708737864077,
+        "purchase_eligibility": 0.0,
+        "loyalty_balance": 0.0,
+        "api_endpoint": 0.0,
+        "user_session_hash": 0.0,
+        "tier": 0.0,
+        "next_tier": 0.0,
+        "app_section": 0.0,
+        "app_event": 0.0,
+        "user_id_hash": 0.0,
+        "language": 0.0,
+        "action_result": 0.0,
+        "status_result": 0.0,
+        "technical_flag": 0.0,
+        "client_agent": 0.0,
+        "source_file": 0.0,
+        "smartphone_type": 0.0
+      }
+    }
+  },
+  "preprocess": {
+    "dataset": "data/synthetic/SmartSeg_Synthetic_v1.csv",
+    "summary": {
+      "rows": 5150,
+      "columns": 34,
+      "dtypes": {
+        "ts_start": "str",
+        "duration_ms": "str",
+        "user_id_hash": "str",
+        "user_session_hash": "str",
+        "language": "str",
+        "tier": "str",
+        "next_tier": "str",
+        "app_section": "str",
+        "app_event": "str",
+        "choice_action": "str",
+        "availability_result": "str",
+        "loyalty_balance": "int64",
+        "purchase_eligibility": "str",
+        "api_endpoint": "str",
+        "offer_name": "str",
+        "offer_value": "str",
+        "partner_link": "str",
+        "payment_source": "str",
+        "action_result": "str",
+        "amount_TND": "float64",
+        "amount_GO": "str",
+        "status_result": "str",
+        "status_code": "str",
+        "technical_flag": "int64",
+        "internal_error_code": "str",
+        "transaction_note": "str",
+        "engagement_action": "str",
+        "features": "str",
+        "banners": "str",
+        "client_agent": "str",
+        "smartphone_type": "str",
+        "source_file": "str",
+        "product_name": "str",
+        "offer_category": "str"
+      }
+    },
+    "schema": {
+      "all_columns": [
+        "ts_start",
+        "duration_ms",
+        "user_id_hash",
+        "user_session_hash",
+        "language",
+        "tier",
+        "next_tier",
+        "app_section",
+        "app_event",
+        "choice_action",
+        "availability_result",
+        "loyalty_balance",
+        "purchase_eligibility",
+        "api_endpoint",
+        "offer_name",
+        "offer_value",
+        "partner_link",
+        "payment_source",
+        "action_result",
+        "amount_TND",
+        "amount_GO",
+        "status_result",
+        "status_code",
+        "technical_flag",
+        "internal_error_code",
+        "transaction_note",
+        "engagement_action",
+        "features",
+        "banners",
+        "client_agent",
+        "smartphone_type",
+        "source_file",
+        "product_name",
+        "offer_category"
+      ],
+      "numeric_columns": [
+        "loyalty_balance",
+        "amount_TND",
+        "technical_flag"
+      ],
+      "categorical_columns": [
+        "ts_start",
+        "duration_ms",
+        "user_id_hash",
+        "user_session_hash",
+        "language",
+        "tier",
+        "next_tier",
+        "app_section",
+        "app_event",
+        "choice_action",
+        "availability_result",
+        "purchase_eligibility",
+        "api_endpoint",
+        "offer_name",
+        "offer_value",
+        "partner_link",
+        "payment_source",
+        "action_result",
+        "amount_GO",
+        "status_result",
+        "status_code",
+        "internal_error_code",
+        "transaction_note",
+        "engagement_action",
+        "features",
+        "banners",
+        "client_agent",
+        "smartphone_type",
+        "source_file",
+        "product_name",
+        "offer_category"
+      ],
+      "id_like_columns": [],
+      "high_missing_columns": [
+        "partner_link",
+        "internal_error_code",
+        "payment_source",
+        "engagement_action",
+        "amount_TND",
+        "offer_category",
+        "product_name",
+        "amount_GO",
+        "offer_value",
+        "offer_name",
+        "availability_result"
+      ],
+      "column_missing_ratio": {
+        "partner_link": 0.9450485436893203,
+        "internal_error_code": 0.896504854368932,
+        "payment_source": 0.8306796116504854,
+        "engagement_action": 0.736116504854369,
+        "amount_TND": 0.7007766990291262,
+        "offer_category": 0.6031067961165049,
+        "product_name": 0.6031067961165049,
+        "amount_GO": 0.6031067961165049,
+        "offer_value": 0.6031067961165049,
+        "offer_name": 0.6031067961165049,
+        "availability_result": 0.42330097087378643,
+        "transaction_note": 0.25844660194174757,
+        "features": 0.2506796116504854,
+        "banners": 0.1978640776699029,
+        "choice_action": 0.1436893203883495,
+        "ts_start": 0.021359223300970873,
+        "duration_ms": 0.007184466019417476,
+        "status_code": 0.0033009708737864077,
+        "purchase_eligibility": 0.0,
+        "loyalty_balance": 0.0,
+        "api_endpoint": 0.0,
+        "user_session_hash": 0.0,
+        "tier": 0.0,
+        "next_tier": 0.0,
+        "app_section": 0.0,
+        "app_event": 0.0,
+        "user_id_hash": 0.0,
+        "language": 0.0,
+        "action_result": 0.0,
+        "status_result": 0.0,
+        "technical_flag": 0.0,
+        "client_agent": 0.0,
+        "source_file": 0.0,
+        "smartphone_type": 0.0
+      }
+    },
+    "features_used": [
+      "loyalty_balance",
+      "technical_flag"
+    ],
+    "cleaning": {
+      "dropped_missing_columns": [
+        "amount_TND"
+      ],
+      "dropped_zero_variance_columns": [],
+      "filled_numeric_columns": []
+    },
+    "cleaned_shape": {
+      "rows": 5150,
+      "columns": 2
+    },
+    "cleaned_preview": [
+      {
+        "loyalty_balance": 1096,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 2786,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 1819,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 2634,
+        "technical_flag": 1
+      },
+      {
+        "loyalty_balance": 665,
+        "technical_flag": 1
+      },
+      {
+        "loyalty_balance": 1863,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 2050,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 704,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 2050,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 2523,
+        "technical_flag": 1
+      },
+      {
+        "loyalty_balance": 2479,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 1349,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 2935,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 823,
+        "technical_flag": 1
+      },
+      {
+        "loyalty_balance": 1400,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 778,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 2220,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 1363,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 1115,
+        "technical_flag": 0
+      },
+      {
+        "loyalty_balance": 2523,
+        "technical_flag": 1
+      }
+    ]
+  }
+}
