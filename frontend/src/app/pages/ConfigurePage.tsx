@@ -5,6 +5,7 @@ import { Card, CardTitle } from '../components/ui/Card'
 import { Slider } from '../components/ui/Slider'
 import { Switch } from '../components/ui/Switch'
 import { runClustering } from '../../services/api'
+import { saveRunHistory, type SmartSegRunParameters } from '../../services/history'
 
 type PreprocessOption = {
   label: string
@@ -79,11 +80,42 @@ export function ConfigurePage() {
         throw new Error(clusteringResult.message || 'Clustering failed')
       }
 
-      sessionStorage.setItem('smartseg_run_id', `run-${Date.now()}`)
+      const runId = `run-${Date.now()}`
+      const parameters: SmartSegRunParameters = {
+        algorithm: 'kmeans',
+        k: kValue[0],
+        autoK,
+        preprocessing: {
+          normalization,
+          handleMissing,
+          outlier,
+          scaling,
+          imputation
+        },
+        selectedFeatures
+      }
+
+      sessionStorage.setItem('smartseg_run_id', runId)
+      sessionStorage.setItem('smartseg_run_parameters', JSON.stringify(parameters))
       sessionStorage.setItem(
         'smartseg_clustering_results',
         JSON.stringify(clusteringResult)
       )
+      saveRunHistory({
+        id: runId,
+        createdAt: new Date().toISOString(),
+        datasetId,
+        preprocessedFile,
+        parameters,
+        results: clusteringResult,
+        summary: {
+          k: kValue[0],
+          algorithm: 'K-Means',
+          businessSegments: clusteringResult.business_segments?.length ?? 0,
+          customers: clusteringResult.labels_full_count ?? clusteringResult.labels?.length ?? 0,
+          ruleVersion: clusteringResult.segmentation_rule_version
+        }
+      })
 
       navigate('/results')
     } catch (runError) {

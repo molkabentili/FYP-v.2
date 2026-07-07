@@ -1,4 +1,4 @@
-import { Coins, Download, TrendingUp, Users } from 'lucide-react'
+import { Coins, Download, Mail, TrendingUp, Users } from 'lucide-react'
 import { Card, CardTitle } from '../components/ui/Card'
 import { Progress } from '../components/ui/Progress'
 import { segments, Segment } from '../data/mockData'
@@ -6,7 +6,7 @@ import { Badge } from '../components/ui/Badge'
 import { Table, TBody, TD, TH, THead, TR } from '../components/ui/Table'
 import { formatAtRiskChurn, getDisplaySegments, DisplaySegment, shouldShowChurnRisk } from '../../services/segmentTransform'
 import { Button } from '../components/ui/Button'
-import { downloadTargetedCustomersCsv, downloadTargetedCustomersExcel } from '../data/exporters'
+import { downloadTargetedCustomersCsv, downloadTargetedCustomersExcel, emailTargetedCustomersCsv } from '../data/exporters'
 
 function getRunLevelLabel() {
   return 'Business Segmentation'
@@ -41,6 +41,7 @@ export function ProfilesPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => void downloadTargetedCustomersCsv()}><Download size={16} className="mr-2 inline" />Export All Customers CSV</Button>
+            <Button variant="secondary" onClick={() => void emailTargetedCustomersCsv()}><Mail size={16} className="mr-2 inline" />Email All CSV</Button>
             <Button variant="secondary" onClick={() => void downloadTargetedCustomersExcel()}>Export All Customers Excel</Button>
           </div>
         </div>
@@ -59,6 +60,7 @@ export function ProfilesPage() {
               {isDisplaySegment(segment) && (
                 <>
                   <Button variant="ghost" onClick={() => void downloadTargetedCustomersCsv({ segment: segment.valueSegmentName })}>Export CSV</Button>
+                  <Button variant="ghost" onClick={() => void emailTargetedCustomersCsv({ segment: segment.valueSegmentName })}>Email CSV</Button>
                   <Button variant="ghost" onClick={() => void downloadTargetedCustomersExcel({ segment: segment.valueSegmentName })}>Export Excel</Button>
                 </>
               )}

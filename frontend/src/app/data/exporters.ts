@@ -59,6 +59,38 @@ function downloadBlobFile(fileName: string, blob: Blob) {
   URL.revokeObjectURL(url)
 }
 
+type NavigatorWithFileShare = Navigator & {
+  canShare?: (data: ShareData & { files?: File[] }) => boolean
+  share?: (data: ShareData & { files?: File[] }) => Promise<void>
+}
+
+async function shareOrEmailFile(fileName: string, blob: Blob, subjectText: string, bodyText: string) {
+  const file = new File([blob], fileName, { type: blob.type || 'text/csv;charset=utf-8' })
+  const shareData: ShareData & { files: File[] } = {
+    title: subjectText,
+    text: bodyText,
+    files: [file]
+  }
+  const nav = navigator as NavigatorWithFileShare
+
+  try {
+    if (nav.share && (!nav.canShare || nav.canShare(shareData))) {
+      await nav.share(shareData)
+      return
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return
+    }
+  }
+
+  downloadBlobFile(fileName, blob)
+
+  const subject = encodeURIComponent(subjectText)
+  const body = encodeURIComponent(`${bodyText}\n\nThe CSV file was downloaded on this device. Please attach ${fileName} before sending.`)
+  window.location.href = `mailto:?subject=${subject}&body=${body}`
+}
+
 function getReportSegments(): DisplaySegment[] {
   const generatedSegments = getDisplaySegments()
   if (generatedSegments.length > 0) {
@@ -1007,8 +1039,33 @@ export function downloadCsv() {
   downloadTextFile('segments.csv', buildSegmentCsv(), 'text/csv;charset=utf-8')
 }
 
+export async function emailCsv() {
+  await shareOrEmailFile(
+    'segments.csv',
+    new Blob([buildSegmentCsv()], { type: 'text/csv;charset=utf-8' }),
+    'SmartSeg segment CSV export',
+    'Please find the SmartSeg segment CSV export attached.'
+  )
+}
+
 export async function downloadTargetedCustomersCsv(filters: CustomerExportFilters = {}) {
   await downloadTargetedCustomers(filters, 'csv')
+}
+
+export async function emailTargetedCustomersCsv(filters: CustomerExportFilters = {}) {
+  try {
+    const scope = filters.segment ?? 'All_Customers'
+    const blob = await exportCustomers(toCustomerExportRequest(filters, 'csv'))
+    await shareOrEmailFile(
+      `${normalizeFilePart(scope)}_customers.csv`,
+      blob,
+      `SmartSeg customer CSV export - ${scope}`,
+      'Please find the SmartSeg customer CSV export attached.'
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Customer email export failed'
+    window.alert(message)
+  }
 }
 
 export async function downloadTargetedCustomersExcel(filters: CustomerExportFilters = {}) {

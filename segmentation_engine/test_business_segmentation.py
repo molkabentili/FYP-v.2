@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 
 from segmentation_engine.api.business_segmentation import (
-    BROAD_SEGMENTS,
+    APPROVED_SEGMENTS,
     BusinessSegmentationService,
     NAMING_SOURCE,
     SEGMENTATION_RULE_VERSION,
@@ -44,410 +44,271 @@ def segment_names(result):
 
 
 def test_segment_names_are_metric_based_not_cluster_id_based():
-    result = segment_from_profiles(
+    first = segment_from_profiles(
         [
             (0, 2, {"monthly_spend": 8, "data_consumption_gb": 1}),
-            (1, 2, {"monthly_spend": 160, "data_consumption_gb": 120}),
+            (1, 2, {"monthly_spend": 160, "data_consumption_gb": 120, "clv": 1000}),
+        ],
+        k=2,
+    )
+    second = segment_from_profiles(
+        [
+            (99, 2, {"monthly_spend": 160, "data_consumption_gb": 120, "clv": 1000}),
+            (7, 2, {"monthly_spend": 8, "data_consumption_gb": 1}),
         ],
         k=2,
     )
 
-    names = segment_names(result)
-    assert names[0] == "Low Value Customers"
-    assert names[1] == "High Value Customers"
+    assert segment_names(first)[1] == segment_names(second)[99]
+    assert segment_names(first)[0] == segment_names(second)[7]
 
 
-def test_k_lte_5_only_uses_broad_segment_names():
+def test_only_approved_labels_are_returned_and_each_cluster_has_explanation():
     result = segment_from_profiles(
         [
-            (0, 2, {"monthly_spend": 80, "international_calls_min": 220}),
-            (1, 2, {"monthly_spend": 50, "data_consumption_gb": 300, "voice_minutes": 100}),
-            (2, 2, {"monthly_spend": 160, "data_consumption_gb": 120}),
-            (3, 2, {"monthly_spend": 30}),
-            (4, 2, {"monthly_spend": 10}),
+            (0, 2, {"monthly_spend": 20, "data_consumption_gb": 10}),
+            (1, 2, {"monthly_spend": 80, "data_consumption_gb": 80}),
+            (2, 2, {"monthly_spend": 160, "data_consumption_gb": 120, "clv": 1200}),
         ],
-        k=5,
+        k=3,
     )
 
-    assert {cluster["business_segment"] for cluster in result["clusters"]}.issubset(BROAD_SEGMENTS)
-
-
-def test_k4_returns_four_unique_ranked_business_segments():
-    result = segment_from_profiles(
-        [
-            (7, 2, {"monthly_spend": 30, "data_consumption_gb": 20, "churn_risk": 0.9}),
-            (2, 2, {"monthly_spend": 160, "data_consumption_gb": 120, "churn_risk": 0.1}),
-            (5, 2, {"monthly_spend": 95, "data_consumption_gb": 70, "churn_risk": 0.1}),
-            (1, 2, {"monthly_spend": 15, "data_consumption_gb": 5, "churn_risk": 0.1}),
-        ],
-        k=4,
-    )
-
-    cards = result["business_segments"]
-    names = segment_names(result)
-    assert len(cards) == 4
-    assert len(set(names.values())) == 4
-    assert names[7] == "At Risk Customers"
-    assert names[2] == "Premium Customers"
-    assert names[5] == "High Value Customers"
-    assert names[1] == "Low Value Customers"
-
-
-def test_k4_skips_at_risk_when_no_cluster_is_clearly_risky():
-    result = segment_from_profiles(
-        [
-            (4, 2, {"monthly_spend": 150, "data_consumption_gb": 120, "churn_risk": 0.1}),
-            (8, 2, {"monthly_spend": 90, "data_consumption_gb": 70, "churn_risk": 0.1}),
-            (2, 2, {"monthly_spend": 45, "data_consumption_gb": 35, "churn_risk": 0.1}),
-            (6, 2, {"monthly_spend": 15, "data_consumption_gb": 5, "churn_risk": 0.1}),
-        ],
-        k=4,
-    )
-
-    names = segment_names(result)
-    assert "At Risk Customers" not in set(names.values())
-    assert names[4] == "Premium Customers"
-    assert names[8] == "High Value Customers"
-    assert names[2] == "Medium Value Customers"
-    assert names[6] == "Low Value Customers"
-
-
-def test_k5_returns_five_unique_ranked_business_segments():
-    result = segment_from_profiles(
-        [
-            (4, 2, {"monthly_spend": 25, "data_consumption_gb": 10, "churn_risk": 0.9}),
-            (9, 2, {"monthly_spend": 180, "data_consumption_gb": 120, "churn_risk": 0.1}),
-            (1, 2, {"monthly_spend": 100, "data_consumption_gb": 80, "churn_risk": 0.1}),
-            (6, 2, {"monthly_spend": 45, "data_consumption_gb": 40, "churn_risk": 0.1}),
-            (3, 2, {"monthly_spend": 10, "data_consumption_gb": 5, "churn_risk": 0.1}),
-        ],
-        k=5,
-    )
-
-    cards = result["business_segments"]
-    names = segment_names(result)
-    assert len(cards) == 5
-    assert len(set(names.values())) == 5
-    assert names[4] == "At Risk Customers"
-    assert names[9] == "Premium Customers"
-    assert names[1] == "High Value Customers"
-    assert names[6] == "Medium Value Customers"
-    assert names[3] == "Low Value Customers"
-
-
-def test_value_score_prioritizes_revenue_data_and_clv_over_voice():
-    result = segment_from_profiles(
-        [
-            (4, 2, {"monthly_spend": 15, "data_consumption_gb": 5, "voice_minutes": 20, "clv": 150, "churn_risk": 0.9}),
-            (9, 2, {"monthly_spend": 120, "data_consumption_gb": 120, "voice_minutes": 200, "clv": 1200, "churn_risk": 0.1}),
-            (1, 2, {"monthly_spend": 80, "data_consumption_gb": 80, "voice_minutes": 300, "clv": 800, "churn_risk": 0.1}),
-            (6, 2, {"monthly_spend": 32, "data_consumption_gb": 24, "voice_minutes": 900, "clv": 320, "churn_risk": 0.1}),
-            (3, 2, {"monthly_spend": 36, "data_consumption_gb": 121, "voice_minutes": 50, "clv": 360, "churn_risk": 0.1}),
-        ],
-        k=5,
-    )
-
-    clusters = {cluster["cluster_id"]: cluster for cluster in result["clusters"]}
-    names = segment_names(result)
-    assert clusters[3]["value_score"] > clusters[6]["value_score"]
-    assert names[3] == "Medium Value Customers"
-    assert names[6] == "Low Value Customers"
-
-
-def test_low_and_medium_are_swapped_when_low_has_stronger_arpu_and_data():
-    service = BusinessSegmentationService()
-    medium_profile = {
-        "cluster_id": 1,
-        "avg_arpu": 32,
-        "avg_data_usage": 24,
-        "avg_voice_minutes": 900,
-        "avg_clv": 320,
-        "customer_count": 10,
-        "value_score": 0.25,
-    }
-    low_profile = {
-        "cluster_id": 2,
-        "avg_arpu": 36,
-        "avg_data_usage": 121,
-        "avg_voice_minutes": 50,
-        "avg_clv": 360,
-        "customer_count": 10,
-        "value_score": 0.2,
-    }
-    segment_by_cluster = {
-        1: "Medium Value Customers",
-        2: "Low Value Customers",
-    }
-
-    service._swap_low_medium_when_low_is_stronger(
-        [medium_profile, low_profile],
-        segment_by_cluster,
-    )
-
-    assert segment_by_cluster[1] == "Low Value Customers"
-    assert segment_by_cluster[2] == "Medium Value Customers"
-
-
-def test_exact_wrong_medium_low_case_is_corrected():
-    result = segment_from_profiles(
-        [
-            (0, 2, {"monthly_spend": 160, "data_consumption_gb": 140, "voice_minutes": 300, "clv": 30, "tenure_months": 95, "churn_risk": 0.1}),
-            (1, 2, {"monthly_spend": 95, "data_consumption_gb": 80, "voice_minutes": 400, "clv": 20, "tenure_months": 92, "churn_risk": 0.1}),
-            (2, 2, {"monthly_spend": 15, "data_consumption_gb": 5, "voice_minutes": 10, "clv": 2, "tenure_months": 10, "churn_risk": 0.9}),
-            (4, 2, {"monthly_spend": 32.14, "data_consumption_gb": 24.741, "voice_minutes": 902.29, "clv": 10.244, "tenure_months": 90.689, "churn_risk": 0.1}),
-            (3, 2, {"monthly_spend": 36.18, "data_consumption_gb": 121.216, "voice_minutes": 146.937, "clv": 11.479, "tenure_months": 88.582, "churn_risk": 0.1}),
-        ],
-        k=5,
-    )
-
-    names = segment_names(result)
-    clusters = {cluster["cluster_id"]: cluster for cluster in result["clusters"]}
-    assert names[3] == "Medium Value Customers"
-    assert names[4] == "Low Value Customers"
-    assert clusters[3]["value_score"] > clusters[4]["value_score"]
-
-
-def test_api_segments_include_debug_naming_fields():
-    result = segment_from_profiles(
-        [
-            (0, 2, {"monthly_spend": 8, "data_consumption_gb": 1}),
-            (1, 2, {"monthly_spend": 160, "data_consumption_gb": 120}),
-        ],
-        k=2,
-    )
-
-    assert result["segmentation_rule_version"] == SEGMENTATION_RULE_VERSION
-    assert result["naming_source"] == NAMING_SOURCE
     for cluster in result["clusters"]:
+        assert cluster["business_segment"] in APPROVED_SEGMENTS
         assert cluster["rule_version"] == SEGMENTATION_RULE_VERSION
         assert cluster["naming_source"] == NAMING_SOURCE
-        assert "value_score" in cluster
-        assert "risk_score" in cluster
-    for segment in result["business_segments"]:
-        assert segment["rule_version"] == SEGMENTATION_RULE_VERSION
-        assert segment["naming_source"] == NAMING_SOURCE
-        assert "value_score" in segment
-        assert "risk_score" in segment
+        assert cluster["explanation"]
 
 
-def test_k_gt_5_can_use_detailed_segment_names():
+def test_at_risk_is_not_forced_for_healthy_active_customers():
     result = segment_from_profiles(
         [
-            (0, 2, {"monthly_spend": 70, "international_calls_min": 200}),
-            (1, 2, {"monthly_spend": 45, "data_consumption_gb": 260, "voice_minutes": 100}),
-            (2, 2, {"monthly_spend": 45, "data_consumption_gb": 80, "churn_risk": 0.2}),
-            (3, 2, {"monthly_spend": 160, "data_consumption_gb": 120}),
-            (4, 2, {"monthly_spend": 80}),
-            (5, 2, {"monthly_spend": 10}),
-        ],
-        k=6,
-    )
-
-    names = set(segment_names(result).values())
-    assert "International Customers" in names
-    assert "Data Driven Customers" in names
-    assert "Growth Potential Customers" in names
-
-
-def test_medium_churn_alone_does_not_make_all_clusters_at_risk():
-    result = segment_from_profiles(
-        [
-            (0, 2, {"monthly_spend": 35, "churn_risk": 0.55}),
-            (1, 2, {"monthly_spend": 85, "churn_risk": 0.55}),
-            (2, 2, {"monthly_spend": 155, "data_consumption_gb": 120, "churn_risk": 0.55}),
-        ],
-        k=3,
-    )
-
-    assert set(segment_names(result).values()) != {"At Risk Customers"}
-    assert "All customers were classified as At Risk" not in " ".join(result["warnings"])
-
-
-def test_k2_uses_risk_then_value_ranking():
-    result = segment_from_profiles(
-        [
-            (10, 2, {"monthly_spend": 25, "data_consumption_gb": 5, "churn_risk": 0.95}),
-            (2, 2, {"monthly_spend": 130, "data_consumption_gb": 120, "churn_risk": 0.1}),
+            (0, 2, {"monthly_spend": 36, "data_consumption_gb": 122, "satisfaction_score": 8, "complaint_count": 0, "tenure_months": 80, "churn_risk": 0.2}),
+            (1, 2, {"monthly_spend": 80, "data_consumption_gb": 60, "satisfaction_score": 8, "complaint_count": 0, "tenure_months": 85, "churn_risk": 0.2}),
         ],
         k=2,
     )
 
-    names = segment_names(result)
-    assert names[10] == "At Risk Customers"
-    assert names[2] == "High Value Customers"
+    assert "At Risk Customers" not in set(segment_names(result).values())
 
 
-def test_k2_without_clear_risk_uses_high_and_low_value():
+def test_requested_healthy_active_cluster_cannot_be_at_risk():
     result = segment_from_profiles(
         [
-            (9, 2, {"monthly_spend": 30, "data_consumption_gb": 20, "churn_risk": 0.1}),
-            (1, 2, {"monthly_spend": 120, "data_consumption_gb": 100, "churn_risk": 0.1}),
+            (0, 2, {"monthly_spend": 42.68, "data_consumption_gb": 92, "voice_minutes": 273, "satisfaction_score": 7.37, "complaint_count": 0.5, "churn_risk": 0.35}),
+            (1, 2, {"monthly_spend": 120, "data_consumption_gb": 110, "voice_minutes": 320, "satisfaction_score": 8.2, "complaint_count": 0, "churn_risk": 0.1}),
+            (2, 2, {"monthly_spend": 18, "data_consumption_gb": 6, "voice_minutes": 30, "satisfaction_score": 7.1, "complaint_count": 0, "churn_risk": 0.2}),
         ],
-        k=2,
+        k=3,
     )
 
-    names = segment_names(result)
-    assert names[1] == "High Value Customers"
-    assert names[9] == "Low Value Customers"
+    assert segment_names(result)[0] != "At Risk Customers"
 
 
-def test_k3_with_clear_risk_uses_at_risk_high_and_low():
+def test_at_risk_requires_real_risk_evidence():
     result = segment_from_profiles(
         [
-            (3, 2, {"monthly_spend": 20, "data_consumption_gb": 5, "churn_risk": 0.9}),
-            (1, 2, {"monthly_spend": 140, "data_consumption_gb": 110, "churn_risk": 0.1}),
-            (7, 2, {"monthly_spend": 35, "data_consumption_gb": 20, "churn_risk": 0.1}),
+            (0, 2, {"monthly_spend": 25, "data_consumption_gb": 5, "satisfaction_score": 4, "complaint_count": 4, "churn_risk": 0.75}),
+            (1, 2, {"monthly_spend": 100, "data_consumption_gb": 90, "satisfaction_score": 8, "churn_risk": 0.1}),
+            (2, 2, {"monthly_spend": 45, "data_consumption_gb": 35, "satisfaction_score": 8, "churn_risk": 0.1}),
+        ],
+        k=3,
+    )
+
+    assert segment_names(result)[0] == "At Risk Customers"
+
+
+def test_only_true_risky_clusters_receive_at_risk():
+    result = segment_from_profiles(
+        [
+            (0, 2, {"monthly_spend": 20, "data_consumption_gb": 4, "voice_minutes": 15, "satisfaction_score": 5, "complaint_count": 3, "late_payments": 4, "churn_risk": 0.2}),
+            (1, 2, {"monthly_spend": 42, "data_consumption_gb": 92, "voice_minutes": 273, "satisfaction_score": 7.3, "complaint_count": 0.5, "late_payments": 0, "churn_risk": 0.2}),
+            (2, 2, {"monthly_spend": 90, "data_consumption_gb": 110, "voice_minutes": 300, "satisfaction_score": 8.2, "complaint_count": 0, "late_payments": 0, "churn_risk": 0.1}),
         ],
         k=3,
     )
 
     names = segment_names(result)
-    assert names[3] == "At Risk Customers"
-    assert names[1] == "High Value Customers"
-    assert names[7] == "Low Value Customers"
+    assert names[0] == "At Risk Customers"
+    assert names[1] != "At Risk Customers"
+    assert names[2] != "At Risk Customers"
 
 
-def test_k3_without_clear_risk_uses_premium_medium_low():
+def test_international_is_not_forced_without_clear_behavior():
     result = segment_from_profiles(
         [
-            (8, 2, {"monthly_spend": 90, "data_consumption_gb": 80, "churn_risk": 0.1}),
-            (4, 2, {"monthly_spend": 45, "data_consumption_gb": 35, "churn_risk": 0.1}),
-            (2, 2, {"monthly_spend": 15, "data_consumption_gb": 10, "churn_risk": 0.1}),
+            (0, 2, {"monthly_spend": 70, "international_calls_min": 80}),
+            (1, 2, {"monthly_spend": 90, "international_calls_min": 90}),
+            (2, 2, {"monthly_spend": 40, "international_calls_min": 70}),
         ],
         k=3,
     )
 
-    names = segment_names(result)
-    assert names[8] == "Premium Customers"
-    assert names[4] == "Medium Value Customers"
-    assert names[2] == "Low Value Customers"
+    assert "International Customers" not in set(segment_names(result).values())
 
 
-def test_common_late_payment_noise_does_not_swamp_k6_segments():
+def test_international_requires_clear_top_international_minutes():
     result = segment_from_profiles(
         [
-            (0, 2, {"monthly_spend": 31, "data_consumption_gb": 24, "voice_minutes": 900, "late_payments": 6.04}),
-            (1, 2, {"monthly_spend": 40, "data_consumption_gb": 128, "voice_minutes": 157, "late_payments": 9.57}),
-            (2, 2, {"monthly_spend": 143, "international_calls_min": 540, "late_payments": 5.95}),
-            (3, 2, {"monthly_spend": 297, "data_consumption_gb": 462, "international_calls_min": 249, "late_payments": 5.98}),
-            (4, 2, {"monthly_spend": 31, "data_consumption_gb": 113, "voice_minutes": 156, "late_payments": 5.79}),
-            (5, 2, {"monthly_spend": 46, "data_consumption_gb": 123, "voice_minutes": 160, "late_payments": 2.54}),
+            (0, 2, {"monthly_spend": 70, "international_calls_min": 240}),
+            (1, 2, {"monthly_spend": 90, "international_calls_min": 40}),
+            (2, 2, {"monthly_spend": 40, "international_calls_min": 20}),
         ],
-        k=6,
-    )
-
-    names = segment_names(result)
-    assert names[0] == "Medium Value Customers"
-    assert names[1] == "At Risk Customers"
-    assert names[2] == "International Customers"
-    assert names[3] == "International Customers"
-    assert names[5] == "Growth Potential Customers"
-    assert sum(name == "At Risk Customers" for name in names.values()) == 1
-
-
-def test_detailed_mode_splits_middle_arpu_more_strictly_for_k7():
-    result = segment_from_profiles(
-        [
-            (0, 2, {"monthly_spend": 24, "data_consumption_gb": 20}),
-            (1, 2, {"monthly_spend": 35, "data_consumption_gb": 40}),
-            (2, 2, {"monthly_spend": 65, "data_consumption_gb": 80}),
-            (3, 2, {"monthly_spend": 95, "data_consumption_gb": 45}),
-            (4, 2, {"monthly_spend": 170, "data_consumption_gb": 120}),
-            (5, 2, {"monthly_spend": 70, "international_calls_min": 180}),
-            (6, 2, {"monthly_spend": 50, "data_consumption_gb": 270, "voice_minutes": 100}),
-        ],
-        k=7,
-    )
-
-    names = segment_names(result)
-    assert names[0] == "Low Value Customers"
-    assert names[1] == "Medium Value Customers"
-    assert names[2] == "Growth Potential Customers"
-    assert names[3] == "High Value Customers"
-    assert names[4] == "Premium Customers"
-    assert names[5] == "International Customers"
-    assert names[6] == "Data Driven Customers"
-
-
-def test_k8_can_aggregate_duplicate_business_meanings_without_matching_k_cards():
-    result = segment_from_profiles(
-        [
-            (0, 2, {"monthly_spend": 28, "data_consumption_gb": 20}),
-            (1, 2, {"monthly_spend": 34, "data_consumption_gb": 40}),
-            (2, 2, {"monthly_spend": 60, "data_consumption_gb": 90}),
-            (3, 2, {"monthly_spend": 62, "data_consumption_gb": 110}),
-            (4, 2, {"monthly_spend": 100}),
-            (5, 2, {"monthly_spend": 160, "data_consumption_gb": 120}),
-            (6, 2, {"monthly_spend": 75, "international_calls_min": 200}),
-            (7, 2, {"monthly_spend": 55, "data_consumption_gb": 300, "voice_minutes": 120}),
-        ],
-        k=8,
-    )
-
-    cards = result["business_segments"]
-    assert len(result["clusters"]) == 8
-    assert len(cards) < 8
-    assert any(segment["source_cluster_ids"] == [0, 1] for segment in cards)
-    assert any(segment["source_cluster_ids"] == [2, 3] for segment in cards)
-
-
-def test_international_is_detected_before_premium():
-    result = segment_from_profiles(
-        [(0, 3, {"monthly_spend": 180, "data_consumption_gb": 150, "international_calls_min": 200})],
-        k=6,
+        k=3,
     )
 
     assert segment_names(result)[0] == "International Customers"
 
 
-def test_data_driven_is_detected_before_premium():
+def test_data_driven_is_not_forced_without_exceptional_data_usage():
     result = segment_from_profiles(
-        [(0, 3, {"monthly_spend": 180, "data_consumption_gb": 300, "voice_minutes": 100})],
-        k=6,
+        [
+            (0, 2, {"monthly_spend": 70, "data_consumption_gb": 80, "voice_minutes": 100}),
+            (1, 2, {"monthly_spend": 90, "data_consumption_gb": 95, "voice_minutes": 100}),
+            (2, 2, {"monthly_spend": 40, "data_consumption_gb": 70, "voice_minutes": 100}),
+        ],
+        k=3,
+    )
+
+    assert "Data Driven Customers" not in set(segment_names(result).values())
+
+
+def test_data_driven_requires_clear_exceptional_data_usage():
+    result = segment_from_profiles(
+        [
+            (0, 2, {"monthly_spend": 70, "data_consumption_gb": 320, "voice_minutes": 100}),
+            (1, 2, {"monthly_spend": 90, "data_consumption_gb": 80, "voice_minutes": 100}),
+            (2, 2, {"monthly_spend": 40, "data_consumption_gb": 60, "voice_minutes": 100}),
+        ],
+        k=3,
     )
 
     assert segment_names(result)[0] == "Data Driven Customers"
 
 
-def test_premium_medium_and_low_thresholds():
+def test_value_score_prioritizes_revenue_data_and_clv_over_voice():
     result = segment_from_profiles(
         [
-            (0, 2, {"monthly_spend": 150, "data_consumption_gb": 100}),
-            (1, 2, {"monthly_spend": 45}),
-            (2, 2, {"monthly_spend": 10}),
+            (0, 2, {"monthly_spend": 160, "data_consumption_gb": 120, "voice_minutes": 200, "clv": 1200}),
+            (1, 2, {"monthly_spend": 32.14, "data_consumption_gb": 24.741, "voice_minutes": 902.29, "clv": 10.244, "tenure_months": 90.689}),
+            (2, 2, {"monthly_spend": 36.18, "data_consumption_gb": 121.216, "voice_minutes": 146.937, "clv": 11.479, "tenure_months": 88.582}),
         ],
         k=3,
     )
 
-    names = segment_names(result)
-    assert names[0] == "Premium Customers"
-    assert names[1] == "Medium Value Customers"
-    assert names[2] == "Low Value Customers"
+    clusters = {cluster["cluster_id"]: cluster for cluster in result["clusters"]}
+    assert clusters[2]["value_score"] > clusters[1]["value_score"]
 
 
-def test_duplicate_business_segments_are_aggregated_with_weighted_averages_for_detailed_mode():
+def test_requested_valuable_customer_cannot_be_low_value():
     result = segment_from_profiles(
         [
-            (0, 2, {"monthly_spend": 30, "data_consumption_gb": 10}),
-            (1, 4, {"monthly_spend": 35, "data_consumption_gb": 40}),
-            (2, 2, {"monthly_spend": 10, "data_consumption_gb": 5}),
-            (3, 2, {"monthly_spend": 100, "data_consumption_gb": 40}),
-            (4, 2, {"monthly_spend": 160, "data_consumption_gb": 120}),
-            (5, 2, {"monthly_spend": 75, "international_calls_min": 200}),
+            (0, 2, {"monthly_spend": 133, "data_consumption_gb": 142, "voice_minutes": 591, "tenure_months": 95, "satisfaction_score": 8.38, "clv": 900}),
+            (1, 2, {"monthly_spend": 40, "data_consumption_gb": 40, "voice_minutes": 120, "tenure_months": 40, "satisfaction_score": 7, "clv": 120}),
+            (2, 2, {"monthly_spend": 15, "data_consumption_gb": 4, "voice_minutes": 20, "tenure_months": 12, "satisfaction_score": 6.5, "clv": 20}),
+        ],
+        k=3,
+    )
+
+    assert segment_names(result)[0] != "Low Value Customers"
+
+
+def test_value_fallback_ordering_keeps_premium_strongest_and_low_weakest():
+    result = segment_from_profiles(
+        [
+            (0, 2, {"monthly_spend": 15, "data_consumption_gb": 5, "clv": 10}),
+            (1, 2, {"monthly_spend": 45, "data_consumption_gb": 30, "clv": 200}),
+            (2, 2, {"monthly_spend": 90, "data_consumption_gb": 70, "clv": 500}),
+            (3, 2, {"monthly_spend": 180, "data_consumption_gb": 120, "clv": 1200}),
+        ],
+        k=4,
+    )
+
+    order = ["Premium Customers", "High Value Customers", "Medium Value Customers", "Low Value Customers"]
+    value_clusters = [
+        cluster
+        for cluster in result["clusters"]
+        if cluster["business_segment"] in set(order)
+    ]
+    scores_by_label = {
+        cluster["business_segment"]: cluster["value_score"]
+        for cluster in value_clusters
+    }
+    present_scores = [scores_by_label[label] for label in order if label in scores_by_label]
+
+    assert present_scores == sorted(present_scores, reverse=True)
+    assert scores_by_label["Premium Customers"] == max(present_scores)
+    assert scores_by_label["Low Value Customers"] == min(present_scores)
+
+
+def test_premium_and_low_value_extremes_are_valid_when_present():
+    result = segment_from_profiles(
+        [
+            (0, 2, {"monthly_spend": 10, "data_consumption_gb": 2, "voice_minutes": 10, "clv": 5}),
+            (1, 2, {"monthly_spend": 45, "data_consumption_gb": 35, "voice_minutes": 120, "clv": 100}),
+            (2, 2, {"monthly_spend": 80, "data_consumption_gb": 80, "voice_minutes": 220, "clv": 500}),
+            (3, 2, {"monthly_spend": 170, "data_consumption_gb": 150, "voice_minutes": 300, "clv": 1200}),
+        ],
+        k=4,
+    )
+
+    clusters = result["clusters"]
+    premium = [cluster for cluster in clusters if cluster["business_segment"] == "Premium Customers"]
+    low = [cluster for cluster in clusters if cluster["business_segment"] == "Low Value Customers"]
+    if premium:
+        assert premium[0]["value_score"] == max(cluster["value_score"] for cluster in clusters)
+    if low:
+        assert low[0]["value_score"] == min(cluster["value_score"] for cluster in clusters)
+
+
+def test_special_segments_appear_only_with_confidence():
+    result = segment_from_profiles(
+        [
+            (0, 2, {"monthly_spend": 50, "data_consumption_gb": 60, "international_calls_min": 70, "voice_minutes": 100}),
+            (1, 2, {"monthly_spend": 55, "data_consumption_gb": 65, "international_calls_min": 75, "voice_minutes": 110}),
+            (2, 2, {"monthly_spend": 60, "data_consumption_gb": 70, "international_calls_min": 80, "voice_minutes": 120}),
+        ],
+        k=3,
+    )
+
+    special_names = set(segment_names(result).values()) - {"Premium Customers", "High Value Customers", "Medium Value Customers", "Low Value Customers"}
+    assert special_names == set()
+
+
+def test_k_output_cards_match_selected_k_for_business_segments():
+    result = segment_from_profiles(
+        [
+            (0, 2, {"monthly_spend": 20}),
+            (1, 2, {"monthly_spend": 40}),
+            (2, 2, {"monthly_spend": 60}),
+            (3, 2, {"monthly_spend": 80}),
+            (4, 2, {"monthly_spend": 100}),
+            (5, 2, {"monthly_spend": 120}),
         ],
         k=6,
     )
 
-    medium_segments = [
-        segment for segment in result["business_segments"]
-        if segment["business_segment"] == "Medium Value Customers"
+    assert len(result["clusters"]) == 6
+    assert len(result["business_segments"]) == 6
+    assert all(segment["source_cluster_ids"] == [segment["cluster_id"]] for segment in result["business_segments"])
+
+
+def test_k_2_through_8_return_exactly_k_cards():
+    base_profiles = [
+        (0, 2, {"monthly_spend": 10, "data_consumption_gb": 2, "voice_minutes": 10, "clv": 5}),
+        (1, 2, {"monthly_spend": 25, "data_consumption_gb": 20, "voice_minutes": 80, "clv": 50}),
+        (2, 2, {"monthly_spend": 45, "data_consumption_gb": 40, "voice_minutes": 130, "clv": 120}),
+        (3, 2, {"monthly_spend": 65, "data_consumption_gb": 65, "voice_minutes": 180, "clv": 220}),
+        (4, 2, {"monthly_spend": 85, "data_consumption_gb": 85, "voice_minutes": 230, "clv": 400}),
+        (5, 2, {"monthly_spend": 105, "data_consumption_gb": 100, "voice_minutes": 280, "clv": 650}),
+        (6, 2, {"monthly_spend": 130, "data_consumption_gb": 120, "voice_minutes": 320, "clv": 900}),
+        (7, 2, {"monthly_spend": 170, "data_consumption_gb": 150, "voice_minutes": 360, "clv": 1300}),
     ]
 
-    assert len(medium_segments) == 1
-    assert medium_segments[0]["source_cluster_ids"] == [0, 1]
-    assert medium_segments[0]["customer_count"] == 6
-    assert medium_segments[0]["avg_arpu"] == 33.333
-    assert medium_segments[0]["avg_data_usage"] == 30
+    for k in range(2, 9):
+        result = segment_from_profiles(base_profiles[:k], k=k)
+        assert len(result["clusters"]) == k
+        assert len(result["business_segments"]) == k
 
 
 def test_export_frame_uses_business_segment_and_not_behavioral_group():

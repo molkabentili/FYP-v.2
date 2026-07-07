@@ -17,7 +17,7 @@ import os
 import time
 from dataclasses import dataclass
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 import tempfile
@@ -139,6 +139,18 @@ def verify_access_token(token: str) -> AuthenticatedUser:
         )
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
+
+
+def get_current_user(authorization: Optional[str] = Header(default=None)) -> AuthenticatedUser:
+    """Require a bearer token for protected API actions."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return verify_access_token(token)
 
 
 # ============================================================================
@@ -495,7 +507,10 @@ async def compare_algorithms(request: CompareAlgorithmsRequest):
 # ============================================================================
 
 @app.post("/api/export/customers")
-async def export_customers(request: CustomerExportRequest):
+async def export_customers(
+    request: CustomerExportRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
     """Export targeted customers for campaign activation.
 
     Supports CSV and Excel-compatible exports with filters for business

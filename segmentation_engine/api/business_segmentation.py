@@ -1,18 +1,39 @@
-"""Centralized SmartSeg business segmentation rules.
+"""Deterministic SmartSeg business interpretation layer.
 
-This module is the single source of truth for post-clustering business segment
-names. K-Means/Hierarchical/DBSCAN still decide cluster membership; this layer
-profiles each raw cluster and assigns business names from metrics only.
+K-Means creates mathematical clusters only. This module interprets those raw
+clusters with a small rule-based telecom segment library. It does not train a
+model, generate labels, use random conditions, or use natural-language logic for
+assignment. Segment names always come from APPROVED_SEGMENTS.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import numpy as np
 import pandas as pd
 
+
+SEGMENTATION_RULE_VERSION = "business-v7-validated-adaptive-library"
+NAMING_SOURCE = "backend/business_segmentation.py"
+
+APPROVED_SEGMENTS = (
+    "Premium Customers",
+    "High Value Customers",
+    "Medium Value Customers",
+    "Low Value Customers",
+    "At Risk Customers",
+    "Growth Potential Customers",
+    "Data Driven Customers",
+    "Digital Enthusiast Customers",
+    "International Customers",
+    "Voice Focused Customers",
+    "Loyal Customers",
+    "New Customers",
+    "Dormant Customers",
+    "Budget Conscious Customers",
+)
 
 BROAD_SEGMENTS = {
     "At Risk Customers",
@@ -22,19 +43,7 @@ BROAD_SEGMENTS = {
     "Low Value Customers",
 }
 
-DETAILED_SEGMENTS = {
-    "At Risk Customers",
-    "International Customers",
-    "Data Driven Customers",
-    "Premium Customers",
-    "High Value Customers",
-    "Growth Potential Customers",
-    "Medium Value Customers",
-    "Low Value Customers",
-}
-
-SEGMENTATION_RULE_VERSION = "business-v5-revenue-weighted-value"
-NAMING_SOURCE = "backend/business_segmentation.py"
+DETAILED_SEGMENTS = set(APPROVED_SEGMENTS)
 
 VALUE_SEGMENT_ORDER = (
     "Premium Customers",
@@ -43,12 +52,32 @@ VALUE_SEGMENT_ORDER = (
     "Low Value Customers",
 )
 
+SPECIAL_SEGMENT_ORDER = (
+    "At Risk Customers",
+    "International Customers",
+    "Data Driven Customers",
+    "Digital Enthusiast Customers",
+    "Voice Focused Customers",
+    "Loyal Customers",
+    "New Customers",
+    "Dormant Customers",
+    "Growth Potential Customers",
+    "Budget Conscious Customers",
+)
+
 
 @dataclass(frozen=True)
 class MetricSpec:
     output_name: str
     aliases: tuple[str, ...]
     default: float
+
+
+@dataclass(frozen=True)
+class SegmentDecision:
+    name: str
+    confidence: float
+    explanation: str
 
 
 METRIC_SPECS: tuple[MetricSpec, ...] = (
@@ -186,7 +215,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
 
 
 class BusinessSegmentationService:
-    """Assign and aggregate business segment names from cluster metrics."""
+    """Assign approved business segment names from cluster metrics only."""
 
     def segment_clusters(
         self,
@@ -197,77 +226,51 @@ class BusinessSegmentationService:
         labels_array = np.asarray(list(labels))
         metric_frame = self.build_metric_frame(data)
         unique_cluster_ids = [int(value) for value in sorted(set(labels_array)) if int(value) != -1]
-        k_for_mode = int(mode_cluster_count or len(unique_cluster_ids))
 
-        raw_profiles = [
+        profiles = [
             self._build_cluster_profile(cluster_id, labels_array, metric_frame)
             for cluster_id in unique_cluster_ids
         ]
-        self._apply_cluster_scores(raw_profiles)
-        high_clv_threshold = self._high_clv_threshold(raw_profiles)
-        risk_context = self._build_risk_context(raw_profiles)
-        assignment_context = self._build_assignment_context(raw_profiles)
-        if k_for_mode in {2, 3, 4, 5} and len(raw_profiles) == k_for_mode:
-            assignment_context["stable_ranked_mode"] = 1.0
-        stable_ranked_segments = self._assign_stable_ranked_segments(
-            raw_profiles,
-            k_for_mode,
-            high_clv_threshold,
-            risk_context,
-            assignment_context,
-        )
 
-        segment_by_cluster = self._assign_initial_segments(
-            raw_profiles,
-            k_for_mode,
-            high_clv_threshold,
-            risk_context,
-            assignment_context,
-            stable_ranked_segments,
-        )
-        self._enforce_value_label_consistency(raw_profiles, segment_by_cluster)
+        self._calculate_scores(profiles)
+        decisions = self._assign_segments(profiles)
+        self._validate_final_ordering(profiles, decisions)
+        self._validate_final_assignments(profiles, decisions)
 
         clusters: List[Dict[str, Any]] = []
         warnings: List[str] = []
         validation: Dict[str, Any] = {"clusters": {}, "business_segments": {}}
-        for profile in raw_profiles:
-            segment_name = segment_by_cluster[int(profile["cluster_id"])]
-            assignment_mode = "ranked" if stable_ranked_segments is not None else (
-                "detailed" if k_for_mode > 5 else "broad"
-            )
-            validation_messages = self._validate_profile(
-                profile,
-                segment_name,
-                high_clv_threshold,
-                risk_context,
-                assignment_context,
-            )
+
+        for profile in profiles:
+            decision = decisions[int(profile["cluster_id"])]
+            validation_messages = self._validate_assignment(profile, decision.name, profiles)
             cluster = {
                 **profile,
                 "size": profile["customer_count"],
                 "percentage": self._percentage(profile["customer_count"], len(labels_array)),
-                "business_segment": segment_name,
+                "business_segment": decision.name,
                 "rule_version": SEGMENTATION_RULE_VERSION,
                 "naming_source": NAMING_SOURCE,
+                "naming_confidence": self._round(decision.confidence),
+                "explanation": decision.explanation,
                 "validation_warnings": validation_messages,
-                "assignment_mode": assignment_mode,
             }
             clusters.append(cluster)
             validation["clusters"][str(profile["cluster_id"])] = validation_messages
 
-        business_segments = self._aggregate_business_segments(clusters, len(labels_array))
+        business_segments = self._build_business_segment_cards(clusters, len(labels_array))
         for segment in business_segments:
-            validation["business_segments"][segment["business_segment"]] = segment["validation_warnings"]
+            validation["business_segments"][str(segment["cluster_id"])] = segment["validation_warnings"]
 
-        at_risk_customers = sum(
-            segment["customer_count"]
-            for segment in business_segments
-            if segment["business_segment"] == "At Risk Customers"
-        )
-        if len(labels_array) > 0 and at_risk_customers == len(labels_array):
+        if clusters and all(cluster["business_segment"] == "At Risk Customers" for cluster in clusters):
             warnings.append(
                 "All customers were classified as At Risk. Re-check risk thresholds or input risk metrics."
             )
+
+        segment_by_cluster = {
+            int(cluster["cluster_id"]): cluster["business_segment"]
+            for cluster in clusters
+        }
 
         return {
             "segmentation_rule_version": SEGMENTATION_RULE_VERSION,
@@ -281,12 +284,11 @@ class BusinessSegmentationService:
         }
 
     def build_metric_frame(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Return normalized customer metrics used by exports and profiles.
+        """Return canonical customer metrics used by profiles and exports.
 
-        Missing optional metrics use neutral defaults so an uploaded dataset is
-        still clusterable when it lacks, for example, complaints or late-payment
-        columns. CLV is safely derived from ARPU * tenure when no explicit CLV
-        column exists; otherwise it defaults to 0.
+        Missing optional metrics use neutral defaults. CLV is safely derived from
+        ARPU times tenure when no explicit CLV column exists; otherwise missing
+        CLV remains neutral at 0 so uploads do not crash.
         """
         frame = pd.DataFrame(index=data.index)
         source_columns: Dict[str, Optional[str]] = {}
@@ -368,161 +370,587 @@ class BusinessSegmentationService:
             "avg_churn_probability": self._round(cluster_metrics["churn_probability"].mean()),
         }
 
-    def _apply_cluster_scores(self, profiles: List[Dict[str, Any]]) -> None:
-        """Add relative value/risk scores used for K=2..5 interpretation."""
+    def _calculate_scores(self, profiles: List[Dict[str, Any]]) -> None:
         if not profiles:
             return
 
         normalized = {
             "arpu": self._normalized_values(profiles, "avg_arpu"),
-            "data_usage": self._normalized_values(profiles, "avg_data_usage"),
-            "voice_minutes": self._normalized_values(profiles, "avg_voice_minutes"),
             "clv": self._normalized_values(profiles, "avg_clv"),
-            "tenure_months": self._normalized_values(profiles, "avg_tenure_months"),
-            "churn_probability": self._normalized_values(profiles, "avg_churn_probability"),
+            "data": self._normalized_values(profiles, "avg_data_usage"),
+            "voice": self._normalized_values(profiles, "avg_voice_minutes"),
+            "international": self._normalized_values(profiles, "avg_international_minutes"),
+            "tenure": self._normalized_values(profiles, "avg_tenure_months"),
+            "satisfaction": self._normalized_values(profiles, "avg_satisfaction"),
             "complaints": self._normalized_values(profiles, "avg_complaints"),
             "late_payments": self._normalized_values(profiles, "avg_late_payments"),
-            "satisfaction": self._normalized_values(profiles, "avg_satisfaction"),
+            "churn": self._normalized_values(profiles, "avg_churn_probability"),
         }
 
         for index, profile in enumerate(profiles):
-            value_score = (
-                normalized["arpu"][index] * 0.50
-                + normalized["clv"][index] * 0.25
-                + normalized["data_usage"][index] * 0.15
-                + normalized["tenure_months"][index] * 0.05
-                + normalized["voice_minutes"][index] * 0.05
-            )
-            risk_components = [
-                normalized["churn_probability"][index],
-                normalized["complaints"][index],
-                normalized["late_payments"][index],
-                1 - normalized["satisfaction"][index],
-                1 - normalized["arpu"][index],
-                1 - normalized["data_usage"][index],
-                1 - normalized["voice_minutes"][index],
-            ]
-            profile["value_score"] = self._round(float(value_score), 4)
-            profile["risk_score"] = self._round(float(np.mean(risk_components)), 4)
+            arpu = normalized["arpu"][index]
+            clv = normalized["clv"][index]
+            data = normalized["data"][index]
+            voice = normalized["voice"][index]
+            international = normalized["international"][index]
+            tenure = normalized["tenure"][index]
+            satisfaction = normalized["satisfaction"][index]
+            complaints = normalized["complaints"][index]
+            late_payments = normalized["late_payments"][index]
+            churn = normalized["churn"][index]
+            inactivity = (1 - data + 1 - voice + 1 - arpu) / 3
+            engagement = (data * 0.6) + (voice * 0.4)
+            data_dominance = max(data - voice, 0.0)
+            voice_dominance = max(voice - data, 0.0)
+            medium_value_fit = max(0.0, 1.0 - abs(((arpu + clv) / 2) - 0.55) / 0.55)
 
-        for rank, profile in enumerate(self._sort_by_value(profiles), start=1):
+            profile.update(
+                {
+                    "arpu_score": self._round(arpu, 4),
+                    "clv_score": self._round(clv, 4),
+                    "data_usage_score": self._round(data, 4),
+                    "voice_usage_score": self._round(voice, 4),
+                    "international_usage_score": self._round(international, 4),
+                    "tenure_score": self._round(tenure, 4),
+                    "satisfaction_score": self._round(satisfaction, 4),
+                    "complaints_score": self._round(complaints, 4),
+                    "late_payments_score": self._round(late_payments, 4),
+                    "churn_score": self._round(churn, 4),
+                    "value_score": self._round(
+                        (arpu * 0.50) + (clv * 0.25) + (data * 0.15) + (tenure * 0.05) + (voice * 0.05),
+                        4,
+                    ),
+                    "risk_score": self._round(
+                        (churn * 0.35)
+                        + ((1 - satisfaction) * 0.25)
+                        + (complaints * 0.15)
+                        + (late_payments * 0.15)
+                        + (inactivity * 0.10),
+                        4,
+                    ),
+                    "data_score": self._round((data * 0.75) + (data_dominance * 0.25), 4),
+                    "international_score": self._round(international, 4),
+                    "voice_score": self._round((voice * 0.70) + (voice_dominance * 0.30), 4),
+                    "loyalty_score": self._round((tenure * 0.45) + (satisfaction * 0.35) + ((1 - churn) * 0.20), 4),
+                    "growth_score": self._round(
+                        (medium_value_fit * 0.35)
+                        + (engagement * 0.30)
+                        + (satisfaction * 0.20)
+                        + ((1 - churn) * 0.15),
+                        4,
+                    ),
+                    "digital_score": self._round((data * 0.50) + (((arpu + clv) / 2) * 0.35) + (engagement * 0.15), 4),
+                    "dormant_score": self._round(inactivity, 4),
+                    "budget_score": self._round(((1 - arpu) * 0.45) + (engagement * 0.35) + (satisfaction * 0.20), 4),
+                }
+            )
+
+        for rank, profile in enumerate(self._sort_by(profiles, "value_score"), start=1):
             profile["value_rank"] = rank
-        for rank, profile in enumerate(self._sort_by_risk(profiles), start=1):
+        for rank, profile in enumerate(self._sort_by(profiles, "risk_score"), start=1):
             profile["risk_rank"] = rank
 
-    def _assign_initial_segments(
-        self,
-        profiles: List[Dict[str, Any]],
-        k_for_mode: int,
-        high_clv_threshold: float,
-        risk_context: Dict[str, float],
-        assignment_context: Dict[str, float],
-        stable_ranked_segments: Optional[Dict[int, str]],
-    ) -> Dict[int, str]:
-        if stable_ranked_segments is not None:
-            return dict(stable_ranked_segments)
+    def _assign_segments(self, profiles: List[Dict[str, Any]]) -> Dict[int, SegmentDecision]:
+        decisions: Dict[int, SegmentDecision] = {}
+        unnamed = list(profiles)
 
-        return {
-            int(profile["cluster_id"]): self._assign_business_segment(
-                profile,
-                k_for_mode,
-                high_clv_threshold,
-                risk_context,
-                assignment_context,
-            )
-            for profile in profiles
+        detectors: tuple[tuple[str, Callable[[Dict[str, Any], List[Dict[str, Any]]], Optional[SegmentDecision]]], ...] = (
+            ("At Risk Customers", self._detect_at_risk),
+            ("International Customers", self._detect_international),
+            ("Data Driven Customers", self._detect_data_driven),
+            ("Digital Enthusiast Customers", self._detect_digital_enthusiast),
+            ("Voice Focused Customers", self._detect_voice_focused),
+            ("Loyal Customers", self._detect_loyal),
+            ("New Customers", self._detect_new),
+            ("Dormant Customers", self._detect_dormant),
+            ("Growth Potential Customers", self._detect_growth_potential),
+            ("Budget Conscious Customers", self._detect_budget_conscious),
+        )
+
+        unique_special_segments = {
+            "At Risk Customers",
+            "International Customers",
+            "Data Driven Customers",
+            "Voice Focused Customers",
         }
 
-    def _enforce_value_label_consistency(
+        for segment_name, detector in detectors:
+            candidates = []
+            for profile in unnamed:
+                decision = detector(profile, profiles)
+                if decision is not None and decision.name in APPROVED_SEGMENTS:
+                    candidates.append((profile, decision))
+
+            if not candidates:
+                continue
+
+            candidates.sort(key=lambda item: item[1].confidence, reverse=True)
+            if segment_name in unique_special_segments:
+                if segment_name == "At Risk Customers" and self._all_at_risk_candidates_are_severe(candidates, profiles):
+                    selected = candidates
+                else:
+                    selected = candidates[:1]
+            else:
+                selected = candidates
+
+            for profile, decision in selected:
+                cluster_id = int(profile["cluster_id"])
+                if cluster_id not in decisions:
+                    decisions[cluster_id] = decision
+                    unnamed.remove(profile)
+
+        self._assign_value_fallbacks(unnamed, profiles, decisions)
+        return decisions
+
+    def _assign_value_fallbacks(
+        self,
+        unnamed: List[Dict[str, Any]],
+        all_profiles: List[Dict[str, Any]],
+        decisions: Dict[int, SegmentDecision],
+    ) -> None:
+        if not unnamed:
+            return
+
+        ordered = self._sort_by(unnamed, "value_score")
+        labels = self._value_labels_for_count(ordered, all_profiles)
+        total = len(all_profiles)
+
+        for profile, segment_name in zip(ordered, labels):
+            rank = int(profile.get("value_rank", total))
+            decisions[int(profile["cluster_id"])] = SegmentDecision(
+                name=segment_name,
+                confidence=self._round(float(profile.get("value_score", 0.0)), 4),
+                explanation=(
+                    f"Assigned {segment_name} because this unnamed cluster ranks "
+                    f"#{rank} of {total} by value_score after special segment confidence checks."
+                ),
+            )
+
+    def _value_labels_for_count(
+        self,
+        ordered_profiles: List[Dict[str, Any]],
+        all_profiles: List[Dict[str, Any]],
+    ) -> List[str]:
+        count = len(ordered_profiles)
+        if count <= 0:
+            return []
+        if count == 1:
+            profile = ordered_profiles[0]
+            if self._can_be_low_value(profile, all_profiles):
+                return ["Low Value Customers"]
+            if self._can_be_premium(profile):
+                return ["Premium Customers"]
+            return ["Medium Value Customers"]
+        if count == 2:
+            return [
+                "Premium Customers",
+                self._low_or_budget_or_medium(ordered_profiles[-1], all_profiles),
+            ]
+        if count == 3:
+            return [
+                "Premium Customers",
+                "Medium Value Customers",
+                self._low_or_budget_or_medium(ordered_profiles[-1], all_profiles),
+            ]
+        return (
+            ["Premium Customers", "High Value Customers"]
+            + ["Medium Value Customers"] * (count - 3)
+            + [self._low_or_budget_or_medium(ordered_profiles[-1], all_profiles)]
+        )
+
+    def _validate_final_ordering(
         self,
         profiles: List[Dict[str, Any]],
-        segment_by_cluster: Dict[int, str],
+        decisions: Dict[int, SegmentDecision],
     ) -> None:
-        """Keep value labels ordered by business value after initial naming.
-
-        At Risk is intentionally not touched here because it describes churn
-        behavior, not spending value.
-        """
-        profiles_by_id = {int(profile["cluster_id"]): profile for profile in profiles}
         value_profiles = [
-            profiles_by_id[cluster_id]
-            for cluster_id, segment_name in segment_by_cluster.items()
-            if segment_name in VALUE_SEGMENT_ORDER
+            profile
+            for profile in profiles
+            if decisions[int(profile["cluster_id"])].name in VALUE_SEGMENT_ORDER
         ]
         if len(value_profiles) < 2:
             return
 
-        current_labels = [
-            segment_by_cluster[int(profile["cluster_id"])]
-            for profile in value_profiles
-        ]
+        ordered_profiles = self._sort_by(value_profiles, "value_score")
         ordered_labels = sorted(
-            current_labels,
-            key=lambda segment_name: VALUE_SEGMENT_ORDER.index(segment_name),
+            [decisions[int(profile["cluster_id"])].name for profile in value_profiles],
+            key=lambda label: VALUE_SEGMENT_ORDER.index(label),
         )
-        ordered_profiles = self._sort_by_value(value_profiles)
 
-        for profile, segment_name in zip(ordered_profiles, ordered_labels):
-            segment_by_cluster[int(profile["cluster_id"])] = segment_name
+        for profile, label in zip(ordered_profiles, ordered_labels):
+            cluster_id = int(profile["cluster_id"])
+            if decisions[cluster_id].name != label:
+                decisions[cluster_id] = SegmentDecision(
+                    name=label,
+                    confidence=self._round(float(profile.get("value_score", 0.0)), 4),
+                    explanation=(
+                        f"Assigned {label} after final value ordering validation because "
+                        f"this cluster ranks #{profile.get('value_rank')} by value_score."
+                    ),
+                )
 
-        self._swap_medium_low_by_value_score(profiles, segment_by_cluster)
-        self._swap_low_medium_when_low_is_stronger(profiles, segment_by_cluster)
-
-    def _swap_low_medium_when_low_is_stronger(
+    def _validate_final_assignments(
         self,
         profiles: List[Dict[str, Any]],
-        segment_by_cluster: Dict[int, str],
+        decisions: Dict[int, SegmentDecision],
     ) -> None:
-        profiles_by_id = {int(profile["cluster_id"]): profile for profile in profiles}
-        low_profiles = [
-            profiles_by_id[cluster_id]
-            for cluster_id, segment_name in segment_by_cluster.items()
-            if segment_name == "Low Value Customers"
-        ]
-        medium_profiles = [
-            profiles_by_id[cluster_id]
-            for cluster_id, segment_name in segment_by_cluster.items()
-            if segment_name == "Medium Value Customers"
-        ]
+        """Replace labels that contradict final metrics with valid fallbacks."""
+        for profile in profiles:
+            cluster_id = int(profile["cluster_id"])
+            decision = decisions[cluster_id]
+            replacement: Optional[str] = None
 
-        for low_profile in low_profiles:
-            for medium_profile in medium_profiles:
-                if self._low_value_is_stronger_than_medium(low_profile, medium_profile):
-                    segment_by_cluster[int(low_profile["cluster_id"])] = "Medium Value Customers"
-                    segment_by_cluster[int(medium_profile["cluster_id"])] = "Low Value Customers"
+            if decision.name == "At Risk Customers" and self._detect_at_risk(profile, profiles) is None:
+                replacement = self._best_value_fallback(profile, profiles)
+            elif decision.name == "Low Value Customers" and not self._can_be_low_value(profile, profiles):
+                replacement = self._best_value_fallback(profile, profiles, exclude_low=True)
+            elif decision.name == "Premium Customers" and not self._can_be_premium(profile):
+                replacement = self._best_value_fallback(profile, profiles, exclude_premium=True)
+            elif decision.name == "High Value Customers" and profile["value_score"] < self._median(profiles, "value_score"):
+                replacement = "Medium Value Customers"
 
-    def _low_value_is_stronger_than_medium(
+            if replacement and replacement != decision.name:
+                decisions[cluster_id] = SegmentDecision(
+                    name=replacement,
+                    confidence=self._round(float(profile.get("value_score", 0.0)), 4),
+                    explanation=(
+                        f"Assigned {replacement} after final validation because the previous "
+                        f"{decision.name} label contradicted this cluster's metrics."
+                    ),
+                )
+
+        self._validate_final_ordering(profiles, decisions)
+
+    def _build_business_segment_cards(
         self,
-        low_profile: Dict[str, Any],
-        medium_profile: Dict[str, Any],
-    ) -> bool:
+        clusters: List[Dict[str, Any]],
+        total_customers: int,
+    ) -> List[Dict[str, Any]]:
+        cards = []
+        for cluster in sorted(clusters, key=lambda item: int(item["cluster_id"])):
+            card = {
+                "business_segment": cluster["business_segment"],
+                "name": cluster["business_segment"],
+                "cluster_id": int(cluster["cluster_id"]),
+                "customer_count": int(cluster["customer_count"]),
+                "percentage": self._percentage(cluster["customer_count"], total_customers),
+                "source_cluster_ids": [int(cluster["cluster_id"])],
+                "rule_version": SEGMENTATION_RULE_VERSION,
+                "naming_source": NAMING_SOURCE,
+                "naming_confidence": cluster["naming_confidence"],
+                "explanation": cluster["explanation"],
+                "value_score": cluster["value_score"],
+                "risk_score": cluster["risk_score"],
+                "data_score": cluster["data_score"],
+                "international_score": cluster["international_score"],
+                "loyalty_score": cluster["loyalty_score"],
+                "growth_score": cluster["growth_score"],
+                "avg_arpu": cluster["avg_arpu"],
+                "avg_data_usage": cluster["avg_data_usage"],
+                "avg_voice_minutes": cluster["avg_voice_minutes"],
+                "avg_international_minutes": cluster["avg_international_minutes"],
+                "avg_clv": cluster["avg_clv"],
+                "avg_satisfaction": cluster["avg_satisfaction"],
+                "avg_complaints": cluster["avg_complaints"],
+                "avg_late_payments": cluster["avg_late_payments"],
+                "avg_tenure_months": cluster["avg_tenure_months"],
+                "avg_churn_probability": cluster["avg_churn_probability"],
+                "validation_warnings": cluster["validation_warnings"],
+            }
+            cards.append(card)
+        return cards
+
+    def _detect_at_risk(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+    ) -> Optional[SegmentDecision]:
+        evidence = self._at_risk_evidence(profile)
+        if not evidence or self._is_protected_from_at_risk(profile):
+            return None
+
+        return SegmentDecision(
+            "At Risk Customers",
+            self._round(max(float(profile["risk_score"]), 0.7), 4),
+            f"Assigned At Risk Customers because {'; '.join(evidence)}.",
+        )
+
+    def _detect_international(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+    ) -> Optional[SegmentDecision]:
+        clear_top = self._is_clear_top(profile, profiles, "international_score")
+        significant = profile["avg_international_minutes"] >= max(150.0, self._mean(profiles, "avg_international_minutes") * 1.5)
+        if not (clear_top and significant and profile["avg_arpu"] >= self._median(profiles, "avg_arpu") * 0.75):
+            return None
+        return SegmentDecision(
+            "International Customers",
+            profile["international_score"],
+            "Assigned International Customers because this cluster has the highest international_score and international minutes are significantly above average.",
+        )
+
+    def _detect_data_driven(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+    ) -> Optional[SegmentDecision]:
+        clear_top = self._is_clear_top(profile, profiles, "data_score")
+        exceptional_data = profile["avg_data_usage"] >= max(250.0, self._mean(profiles, "avg_data_usage") * 1.5)
+        voice_not_dominant = profile["data_usage_score"] >= profile["voice_usage_score"]
+        if not (clear_top and exceptional_data and voice_not_dominant):
+            return None
+        return SegmentDecision(
+            "Data Driven Customers",
+            profile["data_score"],
+            "Assigned Data Driven Customers because this cluster has the highest data_score and data usage is significantly above average.",
+        )
+
+    def _detect_digital_enthusiast(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+    ) -> Optional[SegmentDecision]:
+        strong_value = profile["value_score"] >= 0.70 or profile["value_rank"] == 1
+        strong_data = (
+            profile["data_usage_score"] >= 0.75
+            and profile["avg_data_usage"] >= max(150.0, self._mean(profiles, "avg_data_usage") * 1.5)
+        )
+        if not (strong_value and strong_data and profile["digital_score"] >= 0.72):
+            return None
+        return SegmentDecision(
+            "Digital Enthusiast Customers",
+            profile["digital_score"],
+            "Assigned Digital Enthusiast Customers because this cluster combines high value_score with very strong data engagement.",
+        )
+
+    def _detect_voice_focused(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+    ) -> Optional[SegmentDecision]:
+        if not (
+            self._is_clear_top(profile, profiles, "voice_score")
+            and profile["voice_usage_score"] >= 0.75
+            and profile["voice_usage_score"] > profile["data_usage_score"] + 0.20
+        ):
+            return None
+        return SegmentDecision(
+            "Voice Focused Customers",
+            profile["voice_score"],
+            "Assigned Voice Focused Customers because voice minutes dominate this cluster and voice_score is clearly highest.",
+        )
+
+    def _detect_loyal(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+    ) -> Optional[SegmentDecision]:
+        if not (
+            self._is_clear_top(profile, profiles, "loyalty_score")
+            and profile["tenure_score"] >= 0.75
+            and profile["avg_satisfaction"] >= 7.5
+            and profile["avg_complaints"] < 1
+            and profile["avg_churn_probability"] < 40
+        ):
+            return None
+        return SegmentDecision(
+            "Loyal Customers",
+            profile["loyalty_score"],
+            "Assigned Loyal Customers because this cluster has exceptional tenure, good satisfaction, and low churn probability.",
+        )
+
+    def _detect_new(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+    ) -> Optional[SegmentDecision]:
+        if not (
+            profile["tenure_score"] <= 0.15
+            and self._is_clear_bottom(profile, profiles, "avg_tenure_months")
+            and profile["avg_tenure_months"] <= self._mean(profiles, "avg_tenure_months") * 0.55
+        ):
+            return None
+        return SegmentDecision(
+            "New Customers",
+            self._round(1 - float(profile["tenure_score"]), 4),
+            "Assigned New Customers because this cluster has the clearly lowest tenure compared with all clusters.",
+        )
+
+    def _detect_dormant(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+    ) -> Optional[SegmentDecision]:
+        low_activity = (
+            profile["data_usage_score"] <= 0.15
+            and profile["voice_usage_score"] <= 0.15
+            and profile["avg_data_usage"] < 5
+            and profile["avg_voice_minutes"] < 30
+        )
+        low_revenue = profile["arpu_score"] <= 0.20 and profile["avg_arpu"] <= self._median(profiles, "avg_arpu")
+        if not (low_activity and low_revenue and profile["dormant_score"] >= 0.75):
+            return None
+        return SegmentDecision(
+            "Dormant Customers",
+            profile["dormant_score"],
+            "Assigned Dormant Customers because this cluster has extremely low activity, low usage, and low ARPU.",
+        )
+
+    def _detect_growth_potential(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+    ) -> Optional[SegmentDecision]:
+        medium_value = 0.35 <= profile["value_score"] <= 0.72
+        strong_usage = profile["data_usage_score"] >= 0.45 or profile["voice_usage_score"] >= 0.45
+        healthy = profile["avg_satisfaction"] >= 6 and profile["avg_churn_probability"] < 60
+        not_top_value = profile["value_rank"] > 1
+        if not (medium_value and strong_usage and healthy and not_top_value and profile["growth_score"] >= 0.70):
+            return None
+        return SegmentDecision(
+            "Growth Potential Customers",
+            profile["growth_score"],
+            "Assigned Growth Potential Customers because this cluster has medium value_score, strong usage, good satisfaction, and churn probability below 60%.",
+        )
+
+    def _detect_budget_conscious(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+    ) -> Optional[SegmentDecision]:
+        low_arpu = profile["arpu_score"] <= 0.25 and profile["avg_arpu"] < self._median(profiles, "avg_arpu")
+        active_usage = profile["avg_data_usage"] >= 20 or profile["avg_voice_minutes"] >= 100
+        acceptable_satisfaction = profile["avg_satisfaction"] >= 6
+        if not (low_arpu and active_usage and acceptable_satisfaction and profile["budget_score"] >= 0.58):
+            return None
+        return SegmentDecision(
+            "Budget Conscious Customers",
+            profile["budget_score"],
+            "Assigned Budget Conscious Customers because this cluster has low ARPU but active usage and acceptable satisfaction.",
+        )
+
+    def _at_risk_evidence(self, profile: Dict[str, Any]) -> List[str]:
+        if profile["avg_churn_probability"] >= 60:
+            return ["churn_probability is at least 60%"]
+
+        evidence = []
+        if profile["avg_complaints"] >= 2:
+            evidence.append("complaints are at least 2")
+        if profile["avg_late_payments"] >= 3:
+            evidence.append("late payments are at least 3")
+        if profile["avg_satisfaction"] < 6:
+            evidence.append("satisfaction is below 6")
+        if profile["data_usage_score"] <= 0.25:
+            evidence.append("data usage is in the bottom quartile")
+        if profile["voice_usage_score"] <= 0.25:
+            evidence.append("voice usage is in the bottom quartile")
+        if profile["tenure_score"] <= 0.25:
+            evidence.append("tenure is in the bottom quartile")
+
+        return evidence if len(evidence) >= 2 else []
+
+    def _is_protected_from_at_risk(self, profile: Dict[str, Any]) -> bool:
         return (
-            low_profile["avg_arpu"] > medium_profile["avg_arpu"]
-            and low_profile["avg_data_usage"] > medium_profile["avg_data_usage"]
+            profile["avg_satisfaction"] >= 7
+            and profile["avg_complaints"] < 1
+            and self._is_active(profile)
         )
 
-    def _swap_medium_low_by_value_score(
-        self,
-        profiles: List[Dict[str, Any]],
-        segment_by_cluster: Dict[int, str],
-    ) -> None:
-        profiles_by_id = {int(profile["cluster_id"]): profile for profile in profiles}
-        low_profiles = [
-            profiles_by_id[cluster_id]
-            for cluster_id, segment_name in segment_by_cluster.items()
-            if segment_name == "Low Value Customers"
-        ]
-        medium_profiles = [
-            profiles_by_id[cluster_id]
-            for cluster_id, segment_name in segment_by_cluster.items()
-            if segment_name == "Medium Value Customers"
-        ]
+    def _is_severe_at_risk(self, profile: Dict[str, Any]) -> bool:
+        evidence = self._at_risk_evidence(profile)
+        return profile["avg_churn_probability"] >= 60 or len(evidence) >= 3
 
-        for low_profile in low_profiles:
-            for medium_profile in medium_profiles:
-                if low_profile.get("value_score", 0) > medium_profile.get("value_score", 0):
-                    segment_by_cluster[int(low_profile["cluster_id"])] = "Medium Value Customers"
-                    segment_by_cluster[int(medium_profile["cluster_id"])] = "Low Value Customers"
+    def _all_at_risk_candidates_are_severe(
+        self,
+        candidates: List[tuple[Dict[str, Any], SegmentDecision]],
+        profiles: List[Dict[str, Any]],
+    ) -> bool:
+        return len(candidates) > 1 and all(self._is_severe_at_risk(profile) for profile, _ in candidates)
+
+    def _can_be_premium(self, profile: Dict[str, Any]) -> bool:
+        return profile["value_rank"] == 1 or profile["value_score"] >= 0.75 or profile["avg_arpu"] >= 100
+
+    def _can_be_low_value(self, profile: Dict[str, Any], profiles: List[Dict[str, Any]]) -> bool:
+        protected_valuable = (
+            profile["avg_arpu"] > 100
+            and profile["avg_satisfaction"] >= 7
+            and self._is_active(profile)
+        )
+        if protected_valuable:
+            return False
+
+        near_weakest = (
+            profile["value_rank"] == len(profiles)
+            or profile["value_score"] <= self._percentile(profiles, "value_score", 25)
+        )
+        weak_arpu = profile["avg_arpu"] <= self._percentile(profiles, "avg_arpu", 35)
+        weak_clv = profile["avg_clv"] <= self._percentile(profiles, "avg_clv", 35)
+        weak_engagement = profile["data_usage_score"] <= 0.35 and profile["voice_usage_score"] <= 0.35
+        return near_weakest and (weak_arpu or weak_clv or weak_engagement)
+
+    def _low_or_budget_or_medium(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+    ) -> str:
+        if self._can_be_low_value(profile, profiles):
+            return "Low Value Customers"
+        if self._detect_budget_conscious(profile, profiles) is not None:
+            return "Budget Conscious Customers"
+        return "Medium Value Customers"
+
+    def _best_value_fallback(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+        exclude_low: bool = False,
+        exclude_premium: bool = False,
+    ) -> str:
+        if not exclude_premium and self._can_be_premium(profile):
+            return "Premium Customers" if profile["value_rank"] == 1 else "High Value Customers"
+        if profile["value_score"] >= self._percentile(profiles, "value_score", 65):
+            return "High Value Customers"
+        if not exclude_low and self._can_be_low_value(profile, profiles):
+            return "Low Value Customers"
+        if self._detect_budget_conscious(profile, profiles) is not None:
+            return "Budget Conscious Customers"
+        return "Medium Value Customers"
+
+    def _validate_assignment(
+        self,
+        profile: Dict[str, Any],
+        segment_name: str,
+        profiles: List[Dict[str, Any]],
+    ) -> List[str]:
+        warnings: List[str] = []
+
+        if segment_name == "At Risk Customers" and self._detect_at_risk(profile, profiles) is None:
+            warnings.append("At Risk Customers requires strong churn or at least two risk evidence signals.")
+        if segment_name == "Low Value Customers" and not self._can_be_low_value(profile, profiles):
+            warnings.append("Low Value Customers requires the weakest or near-weakest commercial value profile.")
+        if segment_name == "Premium Customers" and not self._can_be_premium(profile):
+            warnings.append("Premium Customers requires one of the strongest value profiles.")
+        if segment_name == "International Customers" and self._detect_international(profile, profiles) is None:
+            warnings.append("International Customers requires clearly highest international behavior.")
+        if segment_name == "Data Driven Customers" and self._detect_data_driven(profile, profiles) is None:
+            warnings.append("Data Driven Customers requires clearly exceptional data behavior.")
+        if segment_name == "Digital Enthusiast Customers" and self._detect_digital_enthusiast(profile, profiles) is None:
+            warnings.append("Digital Enthusiast Customers requires strong value and strong data engagement.")
+        if segment_name == "Voice Focused Customers" and self._detect_voice_focused(profile, profiles) is None:
+            warnings.append("Voice Focused Customers requires clearly dominant voice usage.")
+        if segment_name == "Loyal Customers" and self._detect_loyal(profile, profiles) is None:
+            warnings.append("Loyal Customers requires exceptional tenure, satisfaction, and low churn.")
+        if segment_name == "New Customers" and self._detect_new(profile, profiles) is None:
+            warnings.append("New Customers requires clearly lowest tenure.")
+        if segment_name == "Dormant Customers" and self._detect_dormant(profile, profiles) is None:
+            warnings.append("Dormant Customers requires very low activity, usage, and ARPU.")
+        if segment_name == "Growth Potential Customers" and self._detect_growth_potential(profile, profiles) is None:
+            warnings.append("Growth Potential Customers requires medium value, usage strength, satisfaction >= 6, and churn < 60%.")
+        if segment_name == "Budget Conscious Customers" and self._detect_budget_conscious(profile, profiles) is None:
+            warnings.append("Budget Conscious Customers requires low ARPU, active usage, and acceptable satisfaction.")
+
+        return warnings
 
     def _normalized_values(self, profiles: List[Dict[str, Any]], metric: str) -> List[float]:
         values = [float(profile[metric]) for profile in profiles]
@@ -532,498 +960,76 @@ class BusinessSegmentationService:
             return [0.5 for _ in values]
         return [(value - low) / (high - low) for value in values]
 
-    def _assign_stable_ranked_segments(
+    def _is_clear_top(
         self,
+        profile: Dict[str, Any],
         profiles: List[Dict[str, Any]],
-        k_for_mode: int,
-        high_clv_threshold: float,
-        risk_context: Dict[str, float],
-        assignment_context: Dict[str, float],
-    ) -> Optional[Dict[int, str]]:
-        """Return unique broad business names for K=2..5.
+        score_name: str,
+        margin: float = 0.12,
+    ) -> bool:
+        ordered = self._sort_by(profiles, score_name)
+        if not ordered or ordered[0]["cluster_id"] != profile["cluster_id"]:
+            return False
+        if len(ordered) == 1:
+            return float(profile.get(score_name, 0)) >= 0.70
+        return float(ordered[0].get(score_name, 0)) >= float(ordered[1].get(score_name, 0)) + margin
 
-        This layer interprets the mathematical clusters by relative score, not
-        by cluster id and not by rigid absolute thresholds.
-        """
-        if k_for_mode not in {2, 3, 4, 5} or len(profiles) != k_for_mode:
-            return None
+    def _is_clear_bottom(
+        self,
+        profile: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+        metric_name: str,
+        margin_ratio: float = 0.20,
+    ) -> bool:
+        ordered = sorted(profiles, key=lambda item: float(item.get(metric_name, 0)))
+        if not ordered or ordered[0]["cluster_id"] != profile["cluster_id"]:
+            return False
+        if len(ordered) == 1:
+            return False
+        lowest = float(ordered[0].get(metric_name, 0))
+        second = float(ordered[1].get(metric_name, 0))
+        return lowest <= second * (1 - margin_ratio)
 
-        by_value = self._sort_by_value(profiles)
-        by_risk = self._sort_by_risk(profiles)
-        risk_profile = by_risk[0]
-        has_clear_risk = self._has_clearly_risky_cluster(profiles, risk_profile, risk_context)
+    def _is_active(self, profile: Dict[str, Any]) -> bool:
+        return (
+            profile["data_usage_score"] >= 0.40
+            or profile["voice_usage_score"] >= 0.40
+            or profile["avg_data_usage"] >= 20
+            or profile["avg_voice_minutes"] >= 100
+        )
 
-        if k_for_mode == 2:
-            if has_clear_risk:
-                remaining = [profile for profile in profiles if profile is not risk_profile][0]
-                remaining_name = (
-                    "High Value Customers"
-                    if self._has_strong_value(remaining, high_clv_threshold, assignment_context)
-                    else "Low Value Customers"
-                )
-                return {
-                    int(risk_profile["cluster_id"]): "At Risk Customers",
-                    int(remaining["cluster_id"]): remaining_name,
-                }
+    def _above_cluster_norm(self, profile: Dict[str, Any], score_name: str, threshold: float) -> bool:
+        return float(profile.get(score_name, 0.0)) >= threshold
 
-            return {
-                int(by_value[0]["cluster_id"]): "High Value Customers",
-                int(by_value[-1]["cluster_id"]): "Low Value Customers",
-            }
+    def _below_cluster_norm(self, profile: Dict[str, Any], score_name: str, threshold: float) -> bool:
+        return float(profile.get(score_name, 0.0)) <= threshold
 
-        if k_for_mode == 3:
-            if has_clear_risk:
-                remaining = self._sort_by_value([profile for profile in profiles if profile is not risk_profile])
-                return {
-                    int(risk_profile["cluster_id"]): "At Risk Customers",
-                    int(remaining[0]["cluster_id"]): "High Value Customers",
-                    int(remaining[-1]["cluster_id"]): "Low Value Customers",
-                }
-
-            return {
-                int(by_value[0]["cluster_id"]): "Premium Customers",
-                int(by_value[1]["cluster_id"]): "Medium Value Customers",
-                int(by_value[-1]["cluster_id"]): "Low Value Customers",
-            }
-
-        if k_for_mode == 4:
-            if has_clear_risk:
-                remaining = self._sort_by_value([profile for profile in profiles if profile is not risk_profile])
-                return {
-                    int(risk_profile["cluster_id"]): "At Risk Customers",
-                    int(remaining[0]["cluster_id"]): "Premium Customers",
-                    int(remaining[1]["cluster_id"]): "High Value Customers",
-                    int(remaining[-1]["cluster_id"]): "Low Value Customers",
-                }
-
-            return {
-                int(by_value[0]["cluster_id"]): "Premium Customers",
-                int(by_value[1]["cluster_id"]): "High Value Customers",
-                int(by_value[2]["cluster_id"]): "Medium Value Customers",
-                int(by_value[-1]["cluster_id"]): "Low Value Customers",
-            }
-
-        remaining = self._sort_by_value([profile for profile in profiles if profile is not risk_profile])
-        return {
-            int(risk_profile["cluster_id"]): "At Risk Customers",
-            int(remaining[0]["cluster_id"]): "Premium Customers",
-            int(remaining[1]["cluster_id"]): "High Value Customers",
-            int(remaining[-1]["cluster_id"]): "Low Value Customers",
-            int(remaining[2]["cluster_id"]): "Medium Value Customers",
-        }
-
-    def _sort_by_value(self, profiles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _sort_by(self, profiles: List[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
         return sorted(
             profiles,
             key=lambda profile: (
-                -profile.get("value_score", 0),
-                -profile["avg_arpu"],
-                -profile["avg_clv"],
-                -profile["avg_data_usage"],
-                -profile["avg_tenure_months"],
-                -profile["customer_count"],
-                profile["cluster_id"],
+                float(profile.get(key, 0.0)),
+                float(profile.get("avg_arpu", 0.0)),
+                float(profile.get("avg_clv", 0.0)),
+                -int(profile.get("cluster_id", 0)),
             ),
+            reverse=True,
         )
 
-    def _sort_by_risk(self, profiles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        return sorted(
-            profiles,
-            key=lambda profile: (
-                -profile.get("risk_score", 0),
-                -profile["avg_churn_probability"],
-                -profile["avg_complaints"],
-                -profile["avg_late_payments"],
-                profile["avg_satisfaction"],
-                profile["cluster_id"],
-            ),
-        )
-
-    def _has_clearly_risky_cluster(
-        self,
-        profiles: List[Dict[str, Any]],
-        risk_profile: Dict[str, Any],
-        risk_context: Dict[str, float],
-    ) -> bool:
-        risk_scores = [float(profile.get("risk_score", 0)) for profile in profiles]
-        median_risk = float(np.median(risk_scores))
-        meaningfully_higher = risk_profile.get("risk_score", 0) >= median_risk + 0.15
-        return meaningfully_higher or self._is_at_risk(risk_profile, risk_context)
-
-    def _has_strong_value(
-        self,
-        profile: Dict[str, Any],
-        high_clv_threshold: float,
-        assignment_context: Dict[str, float],
-    ) -> bool:
-        return (
-            profile.get("value_score", 0) >= 0.6
-            or profile["avg_arpu"] >= 70
-            or self._is_high_clv(profile, high_clv_threshold)
-            or (
-                profile["avg_arpu"] >= assignment_context["arpu_p50"]
-                and profile["avg_data_usage"] >= assignment_context["data_p50"]
-            )
-        )
-
-    def _assign_business_segment(
-        self,
-        profile: Dict[str, Any],
-        k_for_mode: int,
-        high_clv_threshold: float,
-        risk_context: Dict[str, float],
-        assignment_context: Dict[str, float],
-    ) -> str:
-        if k_for_mode <= 5:
-            rules = (
-                ("At Risk Customers", self._is_at_risk(profile, risk_context)),
-                ("Premium Customers", self._is_premium(profile)),
-                ("High Value Customers", self._is_broad_high_value(profile, high_clv_threshold)),
-                ("Medium Value Customers", self._is_broad_medium_value(profile)),
-                ("Low Value Customers", True),
-            )
-        else:
-            rules = (
-                ("At Risk Customers", self._is_at_risk(profile, risk_context)),
-                ("International Customers", self._is_international(profile)),
-                ("Data Driven Customers", self._is_data_driven(profile)),
-                ("Premium Customers", self._is_premium(profile)),
-                (
-                    "High Value Customers",
-                    self._is_detailed_high_value(profile)
-                    or self._is_adaptive_high_value(profile, assignment_context, high_clv_threshold),
-                ),
-                (
-                    "Growth Potential Customers",
-                    self._is_growth_potential(profile)
-                    or self._is_adaptive_growth_potential(profile, assignment_context),
-                ),
-                (
-                    "Medium Value Customers",
-                    self._is_detailed_medium_value(profile)
-                    or self._is_adaptive_medium_value(profile, assignment_context),
-                ),
-                ("Low Value Customers", True),
-            )
-
-        for segment_name, matches in rules:
-            if matches and not self._validate_profile(
-                profile,
-                segment_name,
-                high_clv_threshold,
-                risk_context,
-                assignment_context,
-            ):
-                return segment_name
-
-        return "Low Value Customers"
-
-    def _aggregate_business_segments(
-        self,
-        clusters: List[Dict[str, Any]],
-        total_customers: int,
-    ) -> List[Dict[str, Any]]:
-        by_segment: Dict[str, List[Dict[str, Any]]] = {}
-        for cluster in clusters:
-            by_segment.setdefault(cluster["business_segment"], []).append(cluster)
-
-        order = [
-            "At Risk Customers",
-            "International Customers",
-            "Data Driven Customers",
-            "Premium Customers",
-            "High Value Customers",
-            "Growth Potential Customers",
-            "Medium Value Customers",
-            "Low Value Customers",
-        ]
-        segments = []
-        for segment_name in order:
-            items = by_segment.get(segment_name)
-            if not items:
-                continue
-
-            customer_count = sum(item["customer_count"] for item in items)
-            aggregated = {
-                "business_segment": segment_name,
-                "name": segment_name,
-                "cluster_id": None,
-                "customer_count": int(customer_count),
-                "percentage": self._percentage(customer_count, total_customers),
-                "source_cluster_ids": [int(item["cluster_id"]) for item in items],
-                "rule_version": SEGMENTATION_RULE_VERSION,
-                "naming_source": NAMING_SOURCE,
-                "value_score": self._weighted_average(items, "value_score"),
-                "risk_score": self._weighted_average(items, "risk_score"),
-                "avg_arpu": self._weighted_average(items, "avg_arpu"),
-                "avg_data_usage": self._weighted_average(items, "avg_data_usage"),
-                "avg_voice_minutes": self._weighted_average(items, "avg_voice_minutes"),
-                "avg_international_minutes": self._weighted_average(items, "avg_international_minutes"),
-                "avg_clv": self._weighted_average(items, "avg_clv"),
-                "avg_satisfaction": self._weighted_average(items, "avg_satisfaction"),
-                "avg_complaints": self._weighted_average(items, "avg_complaints"),
-                "avg_late_payments": self._weighted_average(items, "avg_late_payments"),
-                "avg_tenure_months": self._weighted_average(items, "avg_tenure_months"),
-                "avg_churn_probability": self._weighted_average(items, "avg_churn_probability"),
-                "validation_warnings": sorted(
-                    set(
-                        warning
-                        for item in items
-                        for warning in item.get("validation_warnings", [])
-                    )
-                ),
-            }
-            segments.append(aggregated)
-
-        return segments
-
-    def _validate_profile(
-        self,
-        profile: Dict[str, Any],
-        segment_name: str,
-        high_clv_threshold: float,
-        risk_context: Optional[Dict[str, float]] = None,
-        assignment_context: Optional[Dict[str, float]] = None,
-    ) -> List[str]:
-        warnings: List[str] = []
-        risk_context = risk_context or {"late_payments_threshold": 5.0, "complaints_threshold": 3.0}
-        assignment_context = assignment_context or self._empty_assignment_context()
-        ranked_mode = bool(assignment_context.get("stable_ranked_mode"))
-
-        ranked_at_risk_valid = ranked_mode and profile.get("risk_rank") == 1
-        ranked_premium_valid = ranked_mode and profile.get("value_rank") == 1
-        ranked_high_value_valid = ranked_mode and profile.get("value_rank") in {1, 2}
-        ranked_medium_value_valid = ranked_mode and profile.get("value_rank") not in {
-            1,
-            assignment_context.get("cluster_count"),
-        }
-        ranked_low_value_valid = ranked_mode and profile.get("value_rank") == assignment_context.get("cluster_count")
-
-        if segment_name == "At Risk Customers" and not (
-            self._is_at_risk(profile, risk_context) or ranked_at_risk_valid
-        ):
-            warnings.append("At Risk Customers requires strong churn, satisfaction, complaint, payment, or inactivity evidence.")
-        if segment_name == "Premium Customers" and not self._is_premium(profile):
-            if not ranked_premium_valid:
-                warnings.append("Premium average ARPU must be >= 150 DT and data usage >= 100.")
-        high_value_valid = (
-            profile["avg_arpu"] >= 70
-            or self._is_high_clv(profile, high_clv_threshold)
-            or self._is_adaptive_high_value(profile, assignment_context, high_clv_threshold)
-            or ranked_high_value_valid
-        )
-        if segment_name == "High Value Customers" and not high_value_valid:
-            warnings.append("High Value average ARPU must satisfy the active broad or detailed ARPU rule unless justified by high CLV.")
-        medium_value_valid = (
-            self._broad_medium_value_supported(profile)
-            or self._is_detailed_medium_value(profile)
-            or self._is_adaptive_medium_value(profile, assignment_context)
-            or ranked_medium_value_valid
-        )
-        if segment_name == "Medium Value Customers" and not medium_value_valid:
-            warnings.append("Medium Value average ARPU must fit the active broad or detailed ARPU/usage rule.")
-        if segment_name == "Low Value Customers" and not (
-            profile["avg_arpu"] < 25 or self._has_low_usage(profile) or ranked_low_value_valid
-        ):
-            warnings.append("Low Value average ARPU should be below 25 DT unless it is fallback due to very low usage.")
-        if segment_name == "International Customers" and not self._is_international(profile):
-            warnings.append("International Customers must have avg_international_minutes >= 150 and ARPU >= 50 DT.")
-        if segment_name == "Data Driven Customers" and not self._is_data_driven(profile):
-            warnings.append("Data Driven Customers must have avg_data_usage >= 250, voice < 400, and ARPU >= 40 DT.")
-        growth_valid = (
-            self._is_growth_potential(profile)
-            or self._is_adaptive_growth_potential(profile, assignment_context)
-        )
-        if segment_name == "Growth Potential Customers" and not growth_valid:
-            warnings.append("Growth Potential requires ARPU 45-90 DT, data usage >= 60, satisfaction >= 6, and churn probability < 60.")
-
-        return warnings
-
-    def _is_at_risk(self, profile: Dict[str, Any], risk_context: Dict[str, float]) -> bool:
-        severe_inactivity = (
-            profile["avg_arpu"] < 5
-            and profile["avg_data_usage"] < 1
-            and profile["avg_voice_minutes"] < 10
-        )
-        high_complaints = profile["avg_complaints"] >= risk_context["complaints_threshold"]
-        high_late_payments = profile["avg_late_payments"] >= risk_context["late_payments_threshold"]
-
-        return (
-            profile["avg_churn_probability"] >= 70
-            or profile["avg_satisfaction"] <= 4
-            or high_complaints
-            or high_late_payments
-            or severe_inactivity
-        )
-
-    def _is_premium(self, profile: Dict[str, Any]) -> bool:
-        return profile["avg_arpu"] >= 150 and profile["avg_data_usage"] >= 100
-
-    def _is_broad_high_value(self, profile: Dict[str, Any], high_clv_threshold: float) -> bool:
-        return profile["avg_arpu"] >= 70 or self._is_high_clv(profile, high_clv_threshold)
-
-    def _is_detailed_high_value(self, profile: Dict[str, Any]) -> bool:
-        return profile["avg_arpu"] >= 90 and profile["avg_arpu"] < 150
-
-    def _broad_medium_value_supported(self, profile: Dict[str, Any]) -> bool:
-        return profile["avg_arpu"] >= 20 and profile["avg_arpu"] < 70
-
-    def _is_broad_medium_value(self, profile: Dict[str, Any]) -> bool:
-        return self._broad_medium_value_supported(profile)
-
-    def _is_detailed_medium_value(self, profile: Dict[str, Any]) -> bool:
-        return (
-            profile["avg_arpu"] >= 25
-            and profile["avg_arpu"] < 45
-            and self._has_normal_data_usage(profile)
-            and not self._is_international(profile)
-            and not self._is_data_driven(profile)
-        )
-
-    def _is_international(self, profile: Dict[str, Any]) -> bool:
-        return profile["avg_international_minutes"] >= 150 and profile["avg_arpu"] >= 50
-
-    def _is_data_driven(self, profile: Dict[str, Any]) -> bool:
-        return (
-            profile["avg_data_usage"] >= 250
-            and profile["avg_voice_minutes"] < 400
-            and profile["avg_arpu"] >= 40
-        )
-
-    def _is_growth_potential(self, profile: Dict[str, Any]) -> bool:
-        return (
-            profile["avg_arpu"] >= 45
-            and profile["avg_arpu"] < 90
-            and profile["avg_data_usage"] >= 60
-            and profile["avg_churn_probability"] < 60
-            and profile["avg_satisfaction"] >= 6
-        )
-
-    def _is_high_clv(self, profile: Dict[str, Any], high_clv_threshold: float) -> bool:
-        return high_clv_threshold > 0 and profile["avg_clv"] >= high_clv_threshold
-
-    def _is_adaptive_high_value(
-        self,
-        profile: Dict[str, Any],
-        assignment_context: Dict[str, float],
-        high_clv_threshold: float,
-    ) -> bool:
-        if not assignment_context["adaptive_value_tiers"]:
-            return False
-
-        return (
-            profile["avg_arpu"] >= assignment_context["arpu_p80"]
-            and self._is_high_clv(profile, high_clv_threshold)
-        )
-
-    def _is_adaptive_growth_potential(
-        self,
-        profile: Dict[str, Any],
-        assignment_context: Dict[str, float],
-    ) -> bool:
-        if not assignment_context["adaptive_value_tiers"]:
-            return False
-
-        return (
-            profile["avg_arpu"] >= assignment_context["arpu_p50"]
-            and profile["avg_arpu"] < assignment_context["arpu_p80"]
-            and profile["avg_data_usage"] >= assignment_context["data_p50"]
-            and profile["avg_churn_probability"] < 60
-            and profile["avg_satisfaction"] >= 6
-        )
-
-    def _is_adaptive_medium_value(
-        self,
-        profile: Dict[str, Any],
-        assignment_context: Dict[str, float],
-    ) -> bool:
-        if not assignment_context["adaptive_value_tiers"]:
-            return False
-
-        return (
-            profile["avg_arpu"] >= assignment_context["arpu_p25"]
-            and profile["avg_arpu"] < assignment_context["arpu_p50"]
-            and self._has_normal_data_usage(profile)
-            and not self._is_international(profile)
-            and not self._is_data_driven(profile)
-        )
-
-    def _has_low_usage(self, profile: Dict[str, Any]) -> bool:
-        return profile["avg_data_usage"] < 1 and profile["avg_voice_minutes"] < 10
-
-    def _has_normal_data_usage(self, profile: Dict[str, Any]) -> bool:
-        return profile["avg_data_usage"] < 250
-
-    def _high_clv_threshold(self, profiles: List[Dict[str, Any]]) -> float:
-        clv_values = [profile["avg_clv"] for profile in profiles if profile["avg_clv"] > 0]
-        if not clv_values:
+    def _mean(self, profiles: List[Dict[str, Any]], key: str) -> float:
+        if not profiles:
             return 0.0
-        return float(np.percentile(clv_values, 75))
+        return float(np.mean([float(profile.get(key, 0.0)) for profile in profiles]))
 
-    def _empty_assignment_context(self) -> Dict[str, float]:
-        return {
-            "adaptive_value_tiers": 0.0,
-            "stable_ranked_mode": 0.0,
-            "cluster_count": 0.0,
-            "arpu_p25": 25.0,
-            "arpu_p50": 45.0,
-            "arpu_p80": 90.0,
-            "data_p50": 60.0,
-        }
-
-    def _build_assignment_context(self, profiles: List[Dict[str, Any]]) -> Dict[str, float]:
+    def _median(self, profiles: List[Dict[str, Any]], key: str) -> float:
         if not profiles:
-            return self._empty_assignment_context()
+            return 0.0
+        return float(np.median([float(profile.get(key, 0.0)) for profile in profiles]))
 
-        arpu_values = [profile["avg_arpu"] for profile in profiles]
-        data_values = [profile["avg_data_usage"] for profile in profiles]
-
-        context = {
-            "adaptive_value_tiers": 0.0,
-            "stable_ranked_mode": 0.0,
-            "cluster_count": float(len(profiles)),
-            "arpu_p25": float(np.percentile(arpu_values, 25)),
-            "arpu_p50": float(np.percentile(arpu_values, 50)),
-            "arpu_p80": float(np.percentile(arpu_values, 80)),
-            "data_p50": float(np.percentile(data_values, 50)),
-        }
-
-        # Some demo/preprocessed telecom datasets store ARPU on a compressed
-        # numeric scale even when the column name says TND/DT. In detailed mode,
-        # absolute Premium/International/Data rules still win first, but ordinary
-        # value tiers may use cluster percentiles so K=6/7/8 does not collapse
-        # into a single Low/Medium card because of units alone.
-        context["adaptive_value_tiers"] = 1.0 if float(np.percentile(arpu_values, 90)) < 70 else 0.0
-        return context
-
-    def _build_risk_context(self, profiles: List[Dict[str, Any]]) -> Dict[str, float]:
-        """Guard optional risk metrics from dominating every cluster.
-
-        The business threshold remains complaints >= 3 and late payments >= 5.
-        When most clusters exceed one of those thresholds, that metric is not
-        discriminative for naming and must be an upper-decile outlier before it
-        can force At Risk on otherwise healthy, active clusters.
-        """
+    def _percentile(self, profiles: List[Dict[str, Any]], key: str, percentile: float) -> float:
         if not profiles:
-            return {"complaints_threshold": 3.0, "late_payments_threshold": 5.0}
-
-        complaint_values = [profile["avg_complaints"] for profile in profiles]
-        late_payment_values = [profile["avg_late_payments"] for profile in profiles]
-        complaint_rate = sum(value >= 3 for value in complaint_values) / len(complaint_values)
-        late_payment_rate = sum(value >= 5 for value in late_payment_values) / len(late_payment_values)
-
-        complaints_threshold = 3.0
-        late_payments_threshold = 5.0
-
-        if complaint_rate > 0.5:
-            complaints_threshold = max(3.0, float(np.percentile(complaint_values, 90)))
-        if late_payment_rate > 0.5:
-            late_payments_threshold = max(5.0, float(np.percentile(late_payment_values, 90)))
-
-        return {
-            "complaints_threshold": complaints_threshold,
-            "late_payments_threshold": late_payments_threshold,
-        }
+            return 0.0
+        return float(np.percentile([float(profile.get(key, 0.0)) for profile in profiles], percentile))
 
     def _find_column(self, data: pd.DataFrame, aliases: Iterable[str]) -> Optional[str]:
         normalized_columns = {self._normalize(column): column for column in data.columns}
@@ -1055,12 +1061,6 @@ class BusinessSegmentationService:
         normalized = np.where((normalized > 1) & (normalized <= 5), normalized * 2, normalized)
         normalized = np.where(normalized > 10, normalized / 10, normalized)
         return pd.Series(normalized, index=values.index).clip(lower=0, upper=10)
-
-    def _weighted_average(self, items: List[Dict[str, Any]], key: str) -> float:
-        total = sum(item["customer_count"] for item in items)
-        if total <= 0:
-            return 0.0
-        return self._round(sum(item[key] * item["customer_count"] for item in items) / total)
 
     def _percentage(self, value: int, total: int) -> float:
         if total <= 0:

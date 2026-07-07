@@ -1,10 +1,10 @@
-import { AlertTriangle, Coins, Download, TrendingUp, Users } from 'lucide-react'
+import { AlertTriangle, Coins, Download, Mail, TrendingUp, Users } from 'lucide-react'
 import { ReactNode } from 'react'
 import { Card, CardTitle } from '../components/ui/Card'
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { formatAtRiskChurn, getDisplaySegments, DisplaySegment } from '../../services/segmentTransform'
 import { Button } from '../components/ui/Button'
-import { downloadTargetedCustomersCsv, downloadTargetedCustomersExcel } from '../data/exporters'
+import { downloadTargetedCustomersCsv, downloadTargetedCustomersExcel, emailTargetedCustomersCsv } from '../data/exporters'
 
 export function DashboardPage() {
   const dynamicSegments = getDisplaySegments()
@@ -46,6 +46,7 @@ export function DashboardPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => void downloadTargetedCustomersCsv()}><Download size={14} className="mr-1 inline" />Export All Customers</Button>
+            <Button variant="secondary" onClick={() => void emailTargetedCustomersCsv()}><Mail size={14} className="mr-1 inline" />Email CSV</Button>
             <Button variant="secondary" onClick={() => void downloadTargetedCustomersExcel()}>Export All Excel</Button>
           </div>
         </div>
@@ -74,6 +75,7 @@ export function DashboardPage() {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button variant="ghost" onClick={() => void downloadTargetedCustomersCsv({ segment: segment.valueSegmentName })}><Download size={14} className="mr-1 inline" />CSV</Button>
+              <Button variant="ghost" onClick={() => void emailTargetedCustomersCsv({ segment: segment.valueSegmentName })}><Mail size={14} className="mr-1 inline" />Email CSV</Button>
               <Button variant="ghost" onClick={() => void downloadTargetedCustomersExcel({ segment: segment.valueSegmentName })}>Excel</Button>
             </div>
           </Card>

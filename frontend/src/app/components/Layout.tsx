@@ -1,5 +1,9 @@
-import { BarChart3, Download, FileText, Home, PlayCircle, Upload } from 'lucide-react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { useState } from 'react'
+import { BarChart3, ChevronDown, Download, FileText, History, Home, LogOut, PlayCircle, Settings, Upload } from 'lucide-react'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { readRunHistory, restoreRunHistoryItem, type SmartSegRunHistoryItem } from '../../services/history'
+import { Button } from './ui/Button'
 
 const navItems = [
   { to: '/', label: 'Home', icon: Home },
@@ -11,6 +15,33 @@ const navItems = [
 ]
 
 export function Layout() {
+  const navigate = useNavigate()
+  const { logout, user } = useAuth()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [historyItems, setHistoryItems] = useState<SmartSegRunHistoryItem[]>([])
+
+  function toggleMenu() {
+    setHistoryItems(readRunHistory())
+    setMenuOpen((open) => !open)
+  }
+
+  function handleParameters() {
+    setMenuOpen(false)
+    navigate('/configure')
+  }
+
+  function handleHistoryRestore(item: SmartSegRunHistoryItem) {
+    restoreRunHistoryItem(item)
+    setMenuOpen(false)
+    navigate('/results')
+  }
+
+  function handleLogout() {
+    setMenuOpen(false)
+    logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b bg-white">
@@ -30,7 +61,73 @@ export function Layout() {
             <div className="flex items-center gap-3">
               <span className="badge-brand">Powered by Ooredoo</span>
               <div className="rounded-full bg-gray-200 px-3 py-1 text-sm font-semibold">MA</div>
-              <span className="text-sm text-slate-600">Marketing Analytics</span>
+              <span className="hidden text-sm text-slate-600 sm:inline">{user?.email ?? 'Marketing Analytics'}</span>
+              <div className="relative">
+                <Button
+                  aria-expanded={menuOpen}
+                  aria-label="Open account menu"
+                  className="flex items-center gap-2"
+                  onClick={toggleMenu}
+                  type="button"
+                  variant="ghost"
+                >
+                  <Settings size={16} />
+                  <span>Menu</span>
+                  <ChevronDown size={14} />
+                </Button>
+
+                {menuOpen && (
+                  <div className="absolute right-0 z-50 mt-2 w-80 rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+                    <button
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-gray-50"
+                      onClick={handleParameters}
+                      type="button"
+                    >
+                      <Settings size={16} />
+                      Parameters
+                    </button>
+
+                    <div className="my-2 border-t border-gray-100" />
+                    <div className="px-3 pb-2">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+                        <History size={14} />
+                        History
+                      </div>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto">
+                      {historyItems.length === 0 ? (
+                        <p className="px-3 py-2 text-sm text-slate-500">No saved runs yet.</p>
+                      ) : (
+                        historyItems.map((item) => (
+                          <button
+                            className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
+                            key={item.id}
+                            onClick={() => handleHistoryRestore(item)}
+                            type="button"
+                          >
+                            <span className="block font-semibold text-slate-800">
+                              {item.summary.algorithm} · k={item.summary.k}
+                            </span>
+                            <span className="block text-xs text-slate-500">
+                              {new Date(item.createdAt).toLocaleString()} · {item.summary.businessSegments} cards
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="my-2 border-t border-gray-100" />
+                    <button
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-red-700 hover:bg-red-50"
+                      onClick={handleLogout}
+                      type="button"
+                    >
+                      <LogOut size={16} />
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

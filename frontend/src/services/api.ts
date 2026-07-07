@@ -11,6 +11,7 @@ declare global {
       VITE_API_BASE_URL?: string;
       VITE_DEFAULT_AUTH_EMAIL?: string;
       VITE_DEFAULT_AUTH_PASSWORD?: string;
+      VITE_ADMIN_EMAIL?: string;
     };
   }
 }
@@ -74,12 +75,19 @@ export interface BusinessCluster {
   avg_churn_probability: number;
   value_score?: number;
   risk_score?: number;
+  data_score?: number;
+  international_score?: number;
+  loyalty_score?: number;
+  growth_score?: number;
+  naming_confidence?: number;
+  explanation?: string;
   rule_version?: string;
   naming_source?: string;
   validation_warnings: string[];
 }
 
 export interface BusinessSegment {
+  cluster_id?: number | null;
   business_segment: string;
   name: string;
   customer_count: number;
@@ -97,6 +105,12 @@ export interface BusinessSegment {
   avg_churn_probability: number;
   value_score?: number;
   risk_score?: number;
+  data_score?: number;
+  international_score?: number;
+  loyalty_score?: number;
+  growth_score?: number;
+  naming_confidence?: number;
+  explanation?: string;
   rule_version?: string;
   naming_source?: string;
   validation_warnings: string[];

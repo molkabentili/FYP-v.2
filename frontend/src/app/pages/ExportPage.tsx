@@ -1,4 +1,4 @@
-import { Download } from 'lucide-react'
+import { Download, Mail } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '../components/ui/Button'
 import { Card, CardTitle } from '../components/ui/Card'
@@ -7,6 +7,7 @@ import {
   downloadBatchPackage,
   downloadCsv,
   downloadExcel,
+  emailCsv,
   downloadJson,
   downloadPowerPoint,
   downloadReportPdf,
@@ -69,6 +70,9 @@ export function ExportPage() {
             <CardTitle className="text-base">{name}</CardTitle>
             <p className="text-sm text-slate-600">Estimated size: {size}</p>
             <Button className="mt-3 w-full" onClick={() => handleFormatDownload(name)}><Download size={16} className="mr-2 inline" />Download</Button>
+            {name === 'CSV Data' && (
+              <Button className="mt-2 w-full" variant="secondary" onClick={() => void emailCsv()}><Mail size={16} className="mr-2 inline" />Send by Email</Button>
+            )}
           </Card>
         ))}
       </div>

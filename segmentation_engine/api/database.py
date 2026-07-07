@@ -16,9 +16,15 @@ DEFAULT_PASSWORD = os.getenv("SMARTSEG_AUTH_PASSWORD", "SmartSeg2026!")
 DEFAULT_ROLE = "Marketing Analyst"
 
 
+def _get_db_path() -> Path:
+    """Resolve the SQLite path lazily so SMARTSEG_DB_PATH can be set in tests."""
+    return Path(os.getenv("SMARTSEG_DB_PATH", str(DB_PATH)))
+
+
 def get_connection() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DB_PATH)
+    db_path = _get_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(db_path)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     return connection
@@ -106,14 +112,29 @@ def get_user_by_id(user_id: int) -> Optional[sqlite3.Row]:
 
 
 def save_analysis(
-    *,
     user_id: int,
-    title: str,
-    dataset_name: Optional[str],
-    algorithm: Optional[str],
-    n_clusters: Optional[int],
-    result: dict[str, Any],
+    payload: Optional[dict[str, Any]] = None,
+    *,
+    title: Optional[str] = None,
+    dataset_name: Optional[str] = None,
+    algorithm: Optional[str] = None,
+    n_clusters: Optional[int] = None,
+    result: Optional[dict[str, Any]] = None,
 ) -> sqlite3.Row:
+    """Persist analysis metadata and result JSON for one user.
+
+    The preferred public contract is save_analysis(user_id, payload), where
+    payload contains metadata plus a compact result JSON. Keyword arguments are
+    still accepted for older internal callers. Uploaded customer files are not
+    stored in SQLite.
+    """
+    payload = payload or {}
+    result_payload = result or payload.get("result") or payload.get("results") or payload
+    title_value = title or payload.get("title") or "Segmentation Analysis"
+    dataset_name_value = dataset_name or payload.get("dataset_name")
+    algorithm_value = algorithm or payload.get("algorithm")
+    n_clusters_value = n_clusters if n_clusters is not None else payload.get("n_clusters")
+
     created_at = datetime.now(timezone.utc).isoformat()
     with get_connection() as connection:
         cursor = connection.execute(
@@ -124,11 +145,11 @@ def save_analysis(
             """,
             (
                 user_id,
-                title,
-                dataset_name,
-                algorithm,
-                n_clusters,
-                json.dumps(result),
+                title_value,
+                dataset_name_value,
+                algorithm_value,
+                n_clusters_value,
+                json.dumps(result_payload, default=str),
                 created_at,
             ),
         )
@@ -155,7 +176,7 @@ def list_analyses(user_id: int) -> list[sqlite3.Row]:
         ).fetchall()
 
 
-def get_analysis(user_id: int, analysis_id: int) -> Optional[sqlite3.Row]:
+def get_analysis(analysis_id: int, user_id: int) -> Optional[sqlite3.Row]:
     with get_connection() as connection:
         return connection.execute(
             """

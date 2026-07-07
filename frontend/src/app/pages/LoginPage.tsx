@@ -4,6 +4,8 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/ui/Button'
 
+const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || 'admin@ooredoo.com'
+
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -32,6 +34,14 @@ export function LoginPage() {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  function handleCredentialRequest() {
+    const subject = encodeURIComponent('SmartSeg access credentials request')
+    const body = encodeURIComponent(
+      'Hello Admin,\n\nPlease create SmartSeg access credentials for me.\n\nName:\nDepartment:\nRole requested: Marketing Analyst\n\nThank you.'
+    )
+    window.location.href = `mailto:${ADMIN_EMAIL}?subject=${subject}&body=${body}`
   }
 
   return (
@@ -103,6 +113,14 @@ export function LoginPage() {
               Sign in
             </Button>
           </form>
+
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <p className="mb-2 text-center text-xs font-medium text-slate-500">No public sign-up. Accounts are created by the administrator.</p>
+            <Button className="flex w-full items-center justify-center gap-2" type="button" variant="secondary" onClick={handleCredentialRequest}>
+              <Mail size={16} />
+              Ask admin for credentials
+            </Button>
+          </div>
         </section>
       </div>
     </main>

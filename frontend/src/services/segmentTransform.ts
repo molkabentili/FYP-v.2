@@ -5,7 +5,7 @@
  * The frontend only maps those business_segment values into UI cards.
  */
 
-export const EXPECTED_SEGMENTATION_RULE_VERSION = 'business-v5-revenue-weighted-value'
+export const EXPECTED_SEGMENTATION_RULE_VERSION = 'business-v7-validated-adaptive-library'
 
 export function clearStaleSegmentationStorage(): void {
   sessionStorage.removeItem('smartseg_clustering_results')
@@ -44,6 +44,7 @@ export interface DisplaySegment {
 export type SegmentViewMode = 'auto' | 'value' | 'business' | 'detailed'
 
 type BackendBusinessSegment = {
+  cluster_id?: number | string | null
   business_segment?: string
   name?: string
   customer_count?: number
@@ -72,34 +73,52 @@ type BackendBusinessSegment = {
   clv?: number
   value_score?: number
   risk_score?: number
+  data_score?: number
+  international_score?: number
+  loyalty_score?: number
+  growth_score?: number
+  naming_confidence?: number
+  explanation?: string
   rule_version?: string
   naming_source?: string
   source_cluster_ids?: number[]
   validation_warnings?: string[]
 }
 
-const BUSINESS_SEGMENT_ORDER = [
-  'At Risk Customers',
-  'International Customers',
-  'Data Driven Customers',
+const APPROVED_BUSINESS_SEGMENTS = [
   'Premium Customers',
   'High Value Customers',
-  'Growth Potential Customers',
   'Medium Value Customers',
-  'Low Value Customers'
+  'Low Value Customers',
+  'At Risk Customers',
+  'Growth Potential Customers',
+  'Data Driven Customers',
+  'Digital Enthusiast Customers',
+  'International Customers',
+  'Voice Focused Customers',
+  'Loyal Customers',
+  'New Customers',
+  'Dormant Customers',
+  'Budget Conscious Customers'
 ] as const
 
-type BusinessSegmentName = (typeof BUSINESS_SEGMENT_ORDER)[number]
+type BusinessSegmentName = (typeof APPROVED_BUSINESS_SEGMENTS)[number]
 
 const BUSINESS_SEGMENT_COLORS: Record<BusinessSegmentName, string> = {
-  'At Risk Customers': '#ef4444',
-  'International Customers': '#db2777',
-  'Data Driven Customers': '#2563eb',
   'Premium Customers': '#7c3aed',
   'High Value Customers': '#16a34a',
-  'Growth Potential Customers': '#0891b2',
   'Medium Value Customers': '#3b82f6',
-  'Low Value Customers': '#f59e0b'
+  'Low Value Customers': '#f59e0b',
+  'At Risk Customers': '#ef4444',
+  'Growth Potential Customers': '#0891b2',
+  'Data Driven Customers': '#2563eb',
+  'Digital Enthusiast Customers': '#0f766e',
+  'International Customers': '#db2777',
+  'Voice Focused Customers': '#ea580c',
+  'Loyal Customers': '#65a30d',
+  'New Customers': '#0284c7',
+  'Dormant Customers': '#64748b',
+  'Budget Conscious Customers': '#ca8a04'
 }
 
 function toNumber(value: unknown, fallback = 0): number {
@@ -112,7 +131,7 @@ function toNumber(value: unknown, fallback = 0): number {
 }
 
 function toBusinessSegmentName(name: unknown): BusinessSegmentName | null {
-  return BUSINESS_SEGMENT_ORDER.includes(name as BusinessSegmentName)
+  return APPROVED_BUSINESS_SEGMENTS.includes(name as BusinessSegmentName)
     ? name as BusinessSegmentName
     : null
 }
@@ -124,17 +143,29 @@ function getBusinessSegmentDescription(segmentName: BusinessSegmentName): string
     case 'International Customers':
       return 'Customers with high international call activity and meaningful revenue contribution.'
     case 'Data Driven Customers':
-      return 'Customers with very high data usage, lower voice intensity, and sufficient ARPU.'
+      return 'Customers with clearly exceptional data usage compared with other clusters.'
+    case 'Digital Enthusiast Customers':
+      return 'High-value customers with strong digital engagement and very strong data usage.'
     case 'Premium Customers':
-      return 'Very high ARPU customers with heavy data usage.'
+      return 'Highest business-value customers after special segment confidence checks.'
     case 'High Value Customers':
-      return 'Strong revenue or lifetime-value customers.'
+      return 'Strong business-value customers below Premium.'
     case 'Growth Potential Customers':
-      return 'Active medium-ARPU customers with strong usage, acceptable satisfaction, and manageable churn risk.'
+      return 'Medium-value active customers with strong usage, acceptable satisfaction, and manageable churn risk.'
     case 'Medium Value Customers':
-      return 'Normal average customers after higher-priority international, data-driven, premium, high-value, and growth rules are checked.'
+      return 'Normal stable customers in the middle of the value ranking.'
     case 'Low Value Customers':
-      return 'Lowest revenue or fallback low-usage customers.'
+      return 'Weakest commercial-value customers by the backend value ranking.'
+    case 'Voice Focused Customers':
+      return 'Customers whose cluster behavior is clearly dominated by voice minutes.'
+    case 'Loyal Customers':
+      return 'Customers with exceptional tenure, good satisfaction, and low churn probability.'
+    case 'New Customers':
+      return 'Customers in the cluster with clearly lowest tenure.'
+    case 'Dormant Customers':
+      return 'Customers with very low activity, low usage, and low ARPU.'
+    case 'Budget Conscious Customers':
+      return 'Low-ARPU customers who remain active and reasonably satisfied.'
   }
 }
 
@@ -146,6 +177,8 @@ function getBusinessSegmentActions(segmentName: BusinessSegmentName): string[] {
       return ['International call bundles', 'Roaming offers', 'Travel packages']
     case 'Data Driven Customers':
       return ['Larger data bundles', '5G upgrades', 'Streaming offers']
+    case 'Digital Enthusiast Customers':
+      return ['Premium digital bundles', '5G upgrades', 'App ecosystem offers']
     case 'Premium Customers':
       return ['VIP care', 'Premium plan protection', 'Exclusive high-data bundles']
     case 'High Value Customers':
@@ -156,6 +189,16 @@ function getBusinessSegmentActions(segmentName: BusinessSegmentName): string[] {
       return ['Bundle optimization', 'Gradual upsell offers', 'Lifecycle campaigns']
     case 'Low Value Customers':
       return ['Basic bundles', 'Efficient prepaid offers', 'Low-cost recharge campaigns']
+    case 'Voice Focused Customers':
+      return ['Voice bundles', 'Family call plans', 'Call-center retention']
+    case 'Loyal Customers':
+      return ['Loyalty rewards', 'Anniversary benefits', 'Priority service']
+    case 'New Customers':
+      return ['Onboarding journeys', 'Welcome bundles', 'Activation education']
+    case 'Dormant Customers':
+      return ['Win-back offers', 'Recharge reminders', 'Low-friction reactivation']
+    case 'Budget Conscious Customers':
+      return ['Budget bundles', 'Usage-based recharge offers', 'Affordable plan nudges']
   }
 }
 
@@ -189,8 +232,12 @@ function mapBusinessSegment(segment: BackendBusinessSegment): DisplaySegment | n
   // backend metric, but it may be absent/0 in datasets that use risk ranking.
   const churnRiskPct = showChurnRisk ? share : rawChurnRiskPct
 
+  const clusterKey = sourceClusterIds.length > 0
+    ? sourceClusterIds.join('-')
+    : String(segment.cluster_id ?? businessName)
+
   return {
-    id: `business-${businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    id: `business-${businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${clusterKey}`,
     clusterId: sourceClusterIds.join(', '),
     sourceClusterIds,
     name: businessName,
@@ -213,7 +260,8 @@ function mapBusinessSegment(segment: BackendBusinessSegment): DisplaySegment | n
       `Source clusters: ${sourceClusterIds.length > 0 ? sourceClusterIds.join(', ') : 'N/A'}`,
       `Naming source: ${segment.naming_source ?? 'backend/business_segmentation.py'}`,
       `Rule version: ${segment.rule_version ?? EXPECTED_SEGMENTATION_RULE_VERSION}`,
-      'Weighted averages calculated by customer count',
+      `Confidence: ${toNumber(segment.naming_confidence).toFixed(2)}`,
+      segment.explanation ?? 'Assigned by backend deterministic segment library.',
       ...getBusinessSegmentActions(businessName)
     ],
     validationWarnings: Array.isArray(segment.validation_warnings) ? segment.validation_warnings : [],
@@ -239,13 +287,9 @@ function getBackendSegments(clusteringResults: any): BackendBusinessSegment[] {
  * Transform backend business segments into display cards.
  */
 export function transformClusteringResults(clusteringResults: any, _mode: SegmentViewMode = 'auto'): DisplaySegment[] {
-  const mapped = getBackendSegments(clusteringResults)
+  return getBackendSegments(clusteringResults)
     .map(mapBusinessSegment)
     .filter((segment): segment is DisplaySegment => segment !== null)
-
-  return BUSINESS_SEGMENT_ORDER
-    .map((segmentName) => mapped.find((segment) => segment.name === segmentName))
-    .filter((segment): segment is DisplaySegment => Boolean(segment))
 }
 
 /**
