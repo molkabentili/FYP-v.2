@@ -17,8 +17,12 @@ export function Layout() {
         <div className="container-page py-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg brand-gradient" />
+              <div className="flex items-center gap-3">
+                <img
+                  src="/ooredoo-seeklogo.png"
+                  alt="Ooredoo"
+                  className="h-10 w-auto object-contain"
+                />
                 <h1 className="text-xl font-bold">SmartSeg</h1>
               </div>
               <p className="text-sm text-slate-600">Customer Intelligence Platform</p>

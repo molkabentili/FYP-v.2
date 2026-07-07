@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartSeg — AI-Powered Telecom Customer Segmentation</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
+<script>
+tailwind.config={theme:{extend:{colors:{ooredoo:'#ED1C24',ooredooDark:'#C41920',dark:{50:'#0A0A0A',100:'#050505',200:'#111111',300:'#1a1a1a',400:'#222'}},fontFamily:{sans:['Inter','sans-serif'],display:['Manrope','sans-serif']}}}}
+</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+::-webkit-scrollbar{width:0}
+body{font-family:'Inter',sans-serif;background:#f5f5f5;color:#1a1a1a;overflow:hidden;height:100vh}
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .6s ease,transform .6s ease;transform:translateX(60px);padding:2rem 3rem;overflow-y:auto}
+.slide.active{opacity:1;pointer-events:all;transform:translateX(0)}
+.slide.prev{transform:translateX(-60px)}
+.glass{background:rgba(237,28,36,.06);border:1px solid rgba(237,28,36,.1);border-radius:1rem;backdrop-filter:blur(12px)}
+.kpi-card{background:linear-gradient(135deg,rgba(237,28,36,.08),rgba(237,28,36,.03));border:1px solid rgba(237,28,36,.15);border-radius:1rem;padding:1.5rem;text-align:center;position:relative;overflow:hidden}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:1rem 1rem 0 0}
+.kpi-card.red::before{background:linear-gradient(90deg,#ED1C24,#ff6b6b)}
+.kpi-card.green::before{background:linear-gradient(90deg,#22c55e,#4ade80)}
+.kpi-card.blue::before{background:linear-gradient(90deg,#3b82f6,#60a5fa)}
+.kpi-card.orange::before{background:linear-gradient(90deg,#f97316,#fb923c)}
+.pipeline-step{background:rgba(237,28,36,.08);border:1px solid rgba(237,28,36,.15);border-radius:.75rem;padding:.75rem 1.25rem;text-align:center;font-size:.85rem;font-weight:500;white-space:nowrap;transition:all .3s;color:#1a1a1a}
+.pipeline-arrow{color:#ED1C24;font-size:1.25rem;display:flex;align-items:center}
+.segment-card{border-radius:1rem;padding:1.25rem;position:relative;overflow:hidden;transition:transform .3s}
+.segment-card.green{background:linear-gradient(135deg,rgba(34,197,94,.1),rgba(34,197,94,.03));border:1px solid rgba(34,197,94,.2)}
+.segment-card.blue{background:linear-gradient(135deg,rgba(59,130,246,.1),rgba(59,130,246,.03));border:1px solid rgba(59,130,246,.2)}
+.segment-card.yellow{background:linear-gradient(135deg,rgba(234,179,8,.1),rgba(234,179,8,.03));border:1px solid rgba(234,179,8,.2)}
+.segment-card.red{background:linear-gradient(135deg,rgba(239,68,68,.1),rgba(239,68,68,.03));border:1px solid rgba(239,68,68,.2)}
+.warn-card{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:.75rem;padding:1rem;display:flex;align-items:center;gap:.75rem;transition:transform .2s;color:#1a1a1a}
+.tech-badge{background:rgba(237,28,36,.08);border:1px solid rgba(237,28,36,.15);border-radius:.5rem;padding:.5rem 1rem;font-size:.8rem;font-weight:500;display:inline-flex;align-items:center;gap:.4rem;color:#1a1a1a}
+.roadmap-step{position:relative;padding-left:2.5rem}
+.roadmap-step::before{content:'';position:absolute;left:.7rem;top:2rem;bottom:-1rem;width:2px;background:linear-gradient(to bottom,rgba(237,28,36,.5),rgba(237,28,36,.1))}
+.roadmap-step:last-child::before{display:none}
+.roadmap-dot{position:absolute;left:0;top:.35rem;width:1.5rem;height:1.5rem;border-radius:50%;border:2px solid #ED1C24;background:#f5f5f5;display:flex;align-items:center;justify-content:center}
+.roadmap-dot.done{background:#ED1C24}
+.glow-red{box-shadow:0 0 30px rgba(237,28,36,.15)}
+.animate-in{opacity:0;transform:translateY(20px);transition:opacity .5s ease,transform .5s ease}
+.slide.active .animate-in{opacity:1;transform:translateY(0)}
+.slide.active .animate-in:nth-child(1){transition-delay:.1s}
+.slide.active .animate-in:nth-child(2){transition-delay:.2s}
+.slide.active .animate-in:nth-child(3){transition-delay:.3s}
+.slide.active .animate-in:nth-child(4){transition-delay:.4s}
+.slide.active .animate-in:nth-child(5){transition-delay:.5s}
+.slide.active .animate-in:nth-child(6){transition-delay:.6s}
+.nav-dot{width:8px;height:8px;border-radius:50%;background:rgba(237,28,36,.2);cursor:pointer;transition:all .3s}
+.nav-dot.active{background:#ED1C24;width:24px;border-radius:4px}
+.nav-btn{width:40px;height:40px;border-radius:50%;background:rgba(237,28,36,.08);border:1px solid rgba(237,28,36,.15);color:#1a1a1a;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.nav-btn:hover{background:rgba(237,28,36,.15);border-color:rgba(237,28,36,.3)}
+.flow-box{background:rgba(237,28,36,.08);border:1px solid rgba(237,28,36,.15);border-radius:.75rem;padding:.6rem 1rem;font-size:.8rem;text-align:center;color:#1a1a1a}
+.icon-box{width:3rem;height:3rem;border-radius:.75rem;display:flex;align-items:center;justify-content:center;font-size:1.25rem}
+.metric-light{width:12px;height:12px;border-radius:50%;display:inline-block}
+.metric-light.red{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.5)}
+.metric-light.yellow{background:#eab308;box-shadow:0 0 8px rgba(234,179,8,.5)}
+.metric-light.green{background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,.5)}
+@keyframes pulse-glow{0%,100%{box-shadow:0 0 10px rgba(237,28,36,.2)}50%{box-shadow:0 0 25px rgba(237,28,36,.4)}}
+.pulse-glow{animation:pulse-glow 2s ease-in-out infinite}
+
+/* ============ PDF PRINT STYLES ============ */
+@media print {
+  body { 
+    overflow: visible !important; 
+    height: auto !important; 
+    background: #f5f5f5 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  #navBar, .nav-btn { display: none !important; }
+  .slide {
+    position: relative !important;
+    opacity: 1 !important;
+    pointer-events: all !important;
+    transform: none !important;
+    display: block !important;
+    page-break-after: always;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+  }
+  .animate-in { opacity: 1 !important; transform: none !important; }
+  .pulse-glow { animation: none !important; box-shadow: 0 0 20px rgba(237,28,36,.25) !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAVIGATION -->
+<div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-white/80 backdrop-blur-md rounded-full px-4 py-2 border border-gray-300" id="navBar">
+  <button class="nav-btn" onclick="prevSlide()" style="width:32px;height:32px">
+    <span class="iconify" data-icon="lucide:chevron-left" data-width="16"></span>
+  </button>
+  <div class="flex items-center gap-1" id="dotsContainer"></div>
+  <button class="nav-btn" onclick="nextSlide()" style="width:32px;height:32px">
+    <span class="iconify" data-icon="lucide:chevron-right" data-width="16"></span>
+  </button>
+  <span class="text-xs text-gray-500 ml-2 font-mono" id="slideCounter">01 / 17</span>
+</div>
+
+<!-- LOGOS -->
+<div class="fixed top-4 left-4 z-50 flex items-center gap-3">
+  <img src="https://z-cdn-media.chatglm.cn/files/a957dab5-13f7-4ad0-8bcd-9604324f405d.png?auth_key=1878694803-031ff4909b864ff6976495adefc8abb7-0-c3a406c0f7470fb0738882c32fe5e76f" alt="Ooredoo" style="height:28px">
+  <img src="https://z-cdn-media.chatglm.cn/files/dc546249-588f-4987-826a-444da884cd4e.png?auth_key=1878694803-fb318e82988a42fea92326abe1a864b2-0-3dec560b569d920fbe7649e96d6b223a" alt="MUST" style="height:28px">
+</div>
+
+<!-- ============ SLIDE 0: COVER ============ -->
+<div class="slide active" data-slide="0">
+  <div class="flex-1 flex flex-col items-center justify-center text-center relative">
+    <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <div class="w-[500px] h-[500px] rounded-full" style="background:radial-gradient(circle,rgba(237,28,36,.08) 0%,transparent 70%)"></div>
+    </div>
+    <div class="animate-in relative z-10">
+      <div class="inline-flex items-center gap-2 bg-ooredoo/10 border border-ooredoo/20 rounded-full px-4 py-1.5 text-ooredoo text-xs font-semibold tracking-widest uppercase mb-6">
+        <span class="iconify" data-icon="lucide:brain-circuit" data-width="14"></span>
+        AI-Powered Analytics
+      </div>
+    </div>
+    <h1 class="animate-in font-display text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter leading-none mb-4 relative z-10 text-gray-900">
+      Smart<span class="text-ooredoo">Seg</span>
+    </h1>
+    <p class="animate-in text-lg md:text-xl text-gray-600 max-w-2xl mb-8 relative z-10 font-light leading-relaxed">
+      AI-Powered Telecom Customer Segmentation Platform
+    </p>
+    <p class="animate-in text-sm text-gray-500 max-w-xl mb-10 relative z-10 leading-relaxed">
+      Using Machine Learning and Data Analytics to Improve Customer Targeting, Retention, and Business Decision-Making in Telecom
+    </p>
+    <div class="animate-in flex items-center gap-4 relative z-10">
+      <button class="bg-ooredoo text-white font-medium text-sm px-6 py-3 rounded-lg" onclick="nextSlide()">
+        Explore Project <span class="iconify inline ml-1" data-icon="lucide:arrow-right" data-width="16"></span>
+      </button>
+      <div class="flex items-center gap-2 text-gray-500 text-xs">
+        <span class="w-2 h-2 rounded-full bg-green-500"></span> Ooredoo × MUST University
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 1: PROJECT OVERVIEW ============ -->
+<div class="slide" data-slide="1">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">01</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">PROJECT OVERVIEW</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">Project Overview</h2>
+  <p class="text-gray-600 text-sm mb-8 max-w-2xl animate-in">SmartSeg groups telecom customers into meaningful segments using machine learning to improve targeting and retention.</p>
+  <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 flex-1">
+    <div class="lg:col-span-3 glass p-6 animate-in">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">Workflow Pipeline</div>
+      <div class="flex items-center gap-2 flex-wrap justify-center">
+        <div class="pipeline-step"><span class="iconify inline mr-1" data-icon="lucide:upload" data-width="14"></span>Data Upload</div>
+        <div class="pipeline-arrow"><span class="iconify" data-icon="lucide:chevron-right" data-width="20"></span></div>
+        <div class="pipeline-step"><span class="iconify inline mr-1" data-icon="lucide:filter" data-width="14"></span>Preprocessing</div>
+        <div class="pipeline-arrow"><span class="iconify" data-icon="lucide:chevron-right" data-width="20"></span></div>
+        <div class="pipeline-step"><span class="iconify inline mr-1" data-icon="lucide:brain-circuit" data-width="14"></span>Clustering</div>
+        <div class="pipeline-arrow"><span class="iconify" data-icon="lucide:chevron-right" data-width="20"></span></div>
+        <div class="pipeline-step"><span class="iconify inline mr-1" data-icon="lucide:chart-bar" data-width="14"></span>Evaluation</div>
+        <div class="pipeline-arrow"><span class="iconify" data-icon="lucide:chevron-right" data-width="20"></span></div>
+        <div class="pipeline-step"><span class="iconify inline mr-1" data-icon="lucide:users" data-width="14"></span>Segments</div>
+      </div>
+      <div class="mt-6 grid grid-cols-3 gap-3">
+        <div class="bg-gray-100 rounded-lg p-3 text-center"><div class="text-ooredoo text-lg mb-1"><span class="iconify inline" data-icon="lucide:target" data-width="20"></span></div><div class="text-xs text-gray-600">Better Targeting</div></div>
+        <div class="bg-gray-100 rounded-lg p-3 text-center"><div class="text-green-400 text-lg mb-1"><span class="iconify inline" data-icon="lucide:shield-check" data-width="20"></span></div><div class="text-xs text-gray-600">Retention</div></div>
+        <div class="bg-gray-100 rounded-lg p-3 text-center"><div class="text-blue-400 text-lg mb-1"><span class="iconify inline" data-icon="lucide:sparkles" data-width="20"></span></div><div class="text-xs text-gray-600">Personalization</div></div>
+      </div>
+    </div>
+    <div class="lg:col-span-2 glass p-6 animate-in flex flex-col">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">Project Status</div>
+      <div class="flex-1 flex flex-col gap-3">
+        <div class="flex items-center gap-3 bg-green-100 border border-green-300 rounded-lg p-3"><span class="text-green-600 text-lg">✅</span><div><div class="text-sm font-medium text-gray-900">Completed</div><div class="text-xs text-gray-600">Pipeline, clustering, dashboard</div></div></div>
+        <div class="flex items-center gap-3 bg-yellow-100 border border-yellow-300 rounded-lg p-3"><span class="text-yellow-600 text-lg">🔄</span><div><div class="text-sm font-medium text-gray-900">In Progress</div><div class="text-xs text-gray-600">Refinement, validation</div></div></div>
+        <div class="flex items-center gap-3 bg-blue-100 border border-blue-300 rounded-lg p-3"><span class="text-blue-600 text-lg">⏳</span><div><div class="text-sm font-medium text-gray-900">Next Steps</div><div class="text-xs text-gray-600">DB, production deploy</div></div></div>
+      </div>
+      <div class="mt-4 pt-4 border-t border-gray-300"><div class="text-xs text-gray-500 mb-2">Overall Progress</div><div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden"><div class="h-full bg-gradient-to-r from-ooredoo to-red-400 rounded-full" style="width:72%"></div></div><div class="text-right text-xs text-ooredoo font-semibold mt-1">72%</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 2: COMPANY CONTEXT ============ -->
+<div class="slide" data-slide="2">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">02</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">COMPANY CONTEXT</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">Telecom Industry & Data</h2>
+  <p class="text-gray-600 text-sm mb-6 animate-in">Telecom operators generate massive customer datasets daily — driving the need for intelligent analytics.</p>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+    <div class="grid grid-cols-2 gap-4 animate-in">
+      <div class="glass p-5 flex flex-col items-center text-center"><div class="icon-box bg-ooredoo/10 text-ooredoo mb-3"><span class="iconify" data-icon="lucide:smartphone" data-width="24"></span></div><div class="text-2xl font-bold font-display text-gray-900">5.4B</div><div class="text-xs text-gray-600 mt-1">Mobile Users</div></div>
+      <div class="glass p-5 flex flex-col items-center text-center"><div class="icon-box bg-blue-100 text-blue-600 mb-3"><span class="iconify" data-icon="lucide:globe" data-width="24"></span></div><div class="text-2xl font-bold font-display text-gray-900">492M</div><div class="text-xs text-gray-600 mt-1">TB Traffic / Day</div></div>
+      <div class="glass p-5 flex flex-col items-center text-center"><div class="icon-box bg-green-100 text-green-600 mb-3"><span class="iconify" data-icon="lucide:trending-up" data-width="24"></span></div><div class="text-2xl font-bold font-display text-gray-900">+12%</div><div class="text-xs text-gray-600 mt-1">Growth YoY</div></div>
+      <div class="glass p-5 flex flex-col items-center text-center"><div class="icon-box bg-orange-100 text-orange-600 mb-3"><span class="iconify" data-icon="lucide:message-circle" data-width="24"></span></div><div class="text-2xl font-bold font-display text-gray-900">24/7</div><div class="text-xs text-gray-600 mt-1">Interactions</div></div>
+    </div>
+    <div class="glass p-6 animate-in flex flex-col items-center justify-center">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">Data Usage Distribution</div>
+      <canvas id="donutChart1" width="280" height="280"></canvas>
+      <div class="grid grid-cols-2 gap-x-6 gap-y-2 mt-4 text-xs">
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm" style="background:#ED1C24"></span><span class="text-gray-700">Internet — 45%</span></div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm" style="background:#3b82f6"></span><span class="text-gray-700">Calls/SMS — 25%</span></div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm" style="background:#22c55e"></span><span class="text-gray-700">Digital — 20%</span></div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm" style="background:#f97316"></span><span class="text-gray-700">Support — 10%</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 3: PROBLEM STATEMENT ============ -->
+<div class="slide" data-slide="3">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">03</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">PROBLEM STATEMENT</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">The Problem</h2>
+  <p class="text-gray-600 text-sm mb-6 animate-in">Without segmentation, telecom operators face generic campaigns, low personalization, and high churn.</p>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 animate-in">
+    <div class="rounded-xl p-6 border" style="background:linear-gradient(135deg,rgba(239,68,68,.08),rgba(239,68,68,.03));border-color:rgba(239,68,68,.2)">
+      <div class="flex items-center gap-2 mb-4"><span class="iconify text-red-600" data-icon="lucide:x-circle" data-width="20"></span><span class="text-red-600 font-semibold text-sm uppercase tracking-wider">Without Segmentation</span></div>
+      <div class="flex flex-col gap-3">
+        <div class="flow-box" style="background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.2)"><span class="iconify inline mr-1 text-red-600" data-icon="lucide:users" data-width="14"></span>Raw Customer Base</div>
+        <div class="flex justify-center"><span class="iconify text-red-300" data-icon="lucide:arrow-down" data-width="20"></span></div>
+        <div class="flow-box" style="background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.2)"><span class="iconify inline mr-1 text-red-600" data-icon="lucide:megaphone" data-width="14"></span>Same Campaign for Everyone</div>
+        <div class="flex justify-center"><span class="iconify text-red-300" data-icon="lucide:arrow-down" data-width="20"></span></div>
+        <div class="flow-box" style="background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.2)"><span class="iconify inline mr-1 text-red-600" data-icon="lucide:trending-down" data-width="14"></span>Low Engagement & Churn</div>
+      </div>
+    </div>
+    <div class="rounded-xl p-6 border" style="background:linear-gradient(135deg,rgba(34,197,94,.08),rgba(34,197,94,.03));border-color:rgba(34,197,94,.2)">
+      <div class="flex items-center gap-2 mb-4"><span class="iconify text-green-600" data-icon="lucide:check-circle" data-width="20"></span><span class="text-green-600 font-semibold text-sm uppercase tracking-wider">With Segmentation</span></div>
+      <div class="flex flex-col gap-3">
+        <div class="flow-box" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.2)"><span class="iconify inline mr-1 text-green-600" data-icon="lucide:brain-circuit" data-width="14"></span>Behavioral Segmentation</div>
+        <div class="flex justify-center"><span class="iconify text-green-300" data-icon="lucide:arrow-down" data-width="20"></span></div>
+        <div class="flow-box" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.2)"><span class="iconify inline mr-1 text-green-600" data-icon="lucide:target" data-width="14"></span>Personalized Strategies</div>
+        <div class="flex justify-center"><span class="iconify text-green-300" data-icon="lucide:arrow-down" data-width="20"></span></div>
+        <div class="flow-box" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.2)"><span class="iconify inline mr-1 text-green-600" data-icon="lucide:trending-up" data-width="14"></span>Higher Retention & Revenue</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 4: WHY THIS MATTERS ============ -->
+<div class="slide" data-slide="4">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">04</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">BUSINESS VALUE</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">Why This Project Matters</h2>
+  <p class="text-gray-600 text-sm mb-8 animate-in">Intelligent segmentation delivers measurable business outcomes.</p>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8 animate-in">
+    <div class="kpi-card red glow-red"><div class="text-3xl mb-2">📈</div><div class="text-3xl md:text-4xl font-bold font-display text-ooredoo">+11.8<span class="text-ooredoo">%</span></div><div class="text-xs text-gray-600 mt-2 uppercase tracking-wider">Campaign Conversion</div></div>
+    <div class="kpi-card green"><div class="text-3xl mb-2">💰</div><div class="text-3xl md:text-4xl font-bold font-display text-green-600">+15<span class="text-green-600">%</span></div><div class="text-xs text-gray-600 mt-2 uppercase tracking-wider">ARPU Growth</div></div>
+    <div class="kpi-card blue"><div class="text-3xl mb-2">🔄</div><div class="text-3xl md:text-4xl font-bold font-display text-blue-600">-10<span class="text-blue-600">%</span></div><div class="text-xs text-gray-600 mt-2 uppercase tracking-wider">Churn Reduction</div></div>
+    <div class="kpi-card orange"><div class="text-3xl mb-2">⏱</div><div class="text-3xl md:text-4xl font-bold font-display text-orange-600">-75<span class="text-orange-600">%</span></div><div class="text-xs text-gray-600 mt-2 uppercase tracking-wider">Reporting Time</div></div>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-5 gap-4 animate-in">
+    <div class="glass p-4 text-center"><span class="iconify text-ooredoo text-xl mb-1" data-icon="lucide:rocket" data-width="20"></span><div class="text-xs text-gray-600">Better performance</div></div>
+    <div class="glass p-4 text-center"><span class="iconify text-green-600 text-xl mb-1" data-icon="lucide:shield-check" data-width="20"></span><div class="text-xs text-gray-600">Increased retention</div></div>
+    <div class="glass p-4 text-center"><span class="iconify text-blue-600 text-xl mb-1" data-icon="lucide:bot" data-width="20"></span><div class="text-xs text-gray-600">Reduced manual work</div></div>
+    <div class="glass p-4 text-center"><span class="iconify text-orange-600 text-xl mb-1" data-icon="lucide:crosshair" data-width="20"></span><div class="text-xs text-gray-600">Better targeting</div></div>
+    <div class="glass p-4 text-center"><span class="iconify text-purple-600 text-xl mb-1" data-icon="lucide:eye" data-width="20"></span><div class="text-xs text-gray-600">Improved understanding</div></div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 5: PAIN POINTS ============ -->
+<div class="slide" data-slide="5">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">05</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">PAIN POINTS</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">Business Pain Points</h2>
+  <p class="text-gray-600 text-sm mb-6 animate-in">Current telecom operational challenges that SmartSeg addresses.</p>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+    <div class="glass p-6 animate-in">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">Pain-Point Flow</div>
+      <div class="flex flex-col items-center gap-2">
+        <div class="flow-box w-full max-w-xs" style="background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.2)"><span class="iconify inline mr-1 text-yellow-600" data-icon="lucide:megaphone" data-width="14"></span>Mass Campaigns</div>
+        <span class="iconify text-yellow-300" data-icon="lucide:arrow-down" data-width="20"></span>
+        <div class="flow-box w-full max-w-xs" style="background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.2)"><span class="iconify inline mr-1 text-yellow-600" data-icon="lucide:user-x" data-width="14"></span>Low Personalization</div>
+        <span class="iconify text-yellow-300" data-icon="lucide:arrow-down" data-width="20"></span>
+        <div class="flow-box w-full max-w-xs" style="background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.2)"><span class="iconify inline mr-1 text-yellow-600" data-icon="lucide:frown" data-width="14"></span>Customer Dissatisfaction</div>
+        <span class="iconify text-red-400" data-icon="lucide:arrow-down" data-width="20"></span>
+        <div class="flow-box w-full max-w-xs" style="background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.2)"><span class="iconify inline mr-1 text-red-600" data-icon="lucide:circle-dollar-sign" data-width="14"></span>Revenue Loss</div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-4 animate-in">
+      <div class="glass p-5 flex flex-col items-center text-center"><div class="text-3xl mb-2">📢</div><div class="text-sm font-semibold text-gray-900">Generic Campaigns</div><div class="text-xs text-gray-600">Low relevance</div></div>
+      <div class="glass p-5 flex flex-col items-center text-center"><div class="text-3xl mb-2">📉</div><div class="text-sm font-semibold text-gray-900">Churn Issues</div><div class="text-xs text-gray-600">No early signals</div></div>
+      <div class="glass p-5 flex flex-col items-center text-center"><div class="text-3xl mb-2">📊</div><div class="text-sm font-semibold text-gray-900">Static Reporting</div><div class="text-xs text-gray-600">No predictive insights</div></div>
+      <div class="glass p-5 flex flex-col items-center text-center"><div class="text-3xl mb-2">⏳</div><div class="text-sm font-semibold text-gray-900">Manual Analysis</div><div class="text-xs text-gray-600">Error-prone</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 6: PROPOSED SOLUTION ============ -->
+<div class="slide" data-slide="6">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">06</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">PROPOSED SOLUTION</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">SmartSeg Platform</h2>
+  <p class="text-gray-600 text-sm mb-6 animate-in">An AI-powered end-to-end customer segmentation solution.</p>
+  <div class="glass p-6 animate-in glow-red relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse at center,rgba(237,28,36,.04) 0%,transparent 70%)"></div>
+    <div class="relative z-10">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-6 font-semibold text-center">AI Workflow Pipeline</div>
+      <div class="flex items-center justify-center gap-3 flex-wrap">
+        <div class="flex flex-col items-center gap-2"><div class="w-16 h-16 rounded-xl bg-ooredoo/15 border border-ooredoo/30 flex items-center justify-center pulse-glow"><span class="iconify text-ooredoo" data-icon="lucide:database" data-width="24"></span></div><span class="text-xs font-medium text-gray-900">Customer Data</span></div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:chevron-right" data-width="24"></span>
+        <div class="flex flex-col items-center gap-2"><div class="w-16 h-16 rounded-xl bg-blue-100 border border-blue-300 flex items-center justify-center"><span class="iconify text-blue-600" data-icon="lucide:filter" data-width="24"></span></div><span class="text-xs font-medium text-gray-900">Preprocessing</span></div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:chevron-right" data-width="24"></span>
+        <div class="flex flex-col items-center gap-2"><div class="w-16 h-16 rounded-xl bg-purple-100 border border-purple-300 flex items-center justify-center pulse-glow"><span class="iconify text-purple-600" data-icon="lucide:brain-circuit" data-width="24"></span></div><span class="text-xs font-medium text-gray-900">ML Clustering</span></div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:chevron-right" data-width="24"></span>
+        <div class="flex flex-col items-center gap-2"><div class="w-16 h-16 rounded-xl bg-green-100 border border-green-300 flex items-center justify-center"><span class="iconify text-green-600" data-icon="lucide:users" data-width="24"></span></div><span class="text-xs font-medium text-gray-900">Segments</span></div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:chevron-right" data-width="24"></span>
+        <div class="flex flex-col items-center gap-2"><div class="w-16 h-16 rounded-xl bg-orange-100 border border-orange-300 flex items-center justify-center"><span class="iconify text-orange-600" data-icon="lucide:layout-dashboard" data-width="24"></span></div><span class="text-xs font-medium text-gray-900">Dashboard</span></div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:chevron-right" data-width="24"></span>
+        <div class="flex flex-col items-center gap-2"><div class="w-16 h-16 rounded-xl bg-ooredoo/15 border border-ooredoo/30 flex items-center justify-center"><span class="iconify text-ooredoo" data-icon="lucide:rocket" data-width="24"></span></div><span class="text-xs font-medium text-gray-900">Actions</span></div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mt-6">
+        <div class="text-center text-xs text-gray-600 py-2 bg-gray-100 rounded-lg">Data cleaning</div>
+        <div class="text-center text-xs text-gray-600 py-2 bg-gray-100 rounded-lg">Feature engineering</div>
+        <div class="text-center text-xs text-gray-600 py-2 bg-gray-100 rounded-lg">K-Means + validation</div>
+        <div class="text-center text-xs text-gray-600 py-2 bg-gray-100 rounded-lg">Interactive UI</div>
+        <div class="text-center text-xs text-gray-600 py-2 bg-gray-100 rounded-lg">Recommendations</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 7: DATASET ============ -->
+<div class="slide" data-slide="7">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">07</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">DATASET</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">Dataset Description</h2>
+  <p class="text-gray-600 text-sm mb-6 animate-in">Realistic telecom customer dataset for segmentation analysis.</p>
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
+    <div class="animate-in space-y-3">
+      <div class="glass p-4 flex items-center gap-3"><div class="icon-box bg-ooredoo/10 text-ooredoo"><span class="iconify" data-icon="lucide:database" data-width="20"></span></div><div><div class="text-lg font-bold font-display text-gray-900">500</div><div class="text-xs text-gray-600">Customers</div></div></div>
+      <div class="glass p-4 flex items-center gap-3"><div class="icon-box bg-blue-100 text-blue-600"><span class="iconify" data-icon="lucide:columns" data-width="20"></span></div><div><div class="text-lg font-bold font-display text-gray-900">20+</div><div class="text-xs text-gray-600">Features</div></div></div>
+      <div class="glass p-4 flex items-center gap-3"><div class="icon-box bg-green-100 text-green-600"><span class="iconify" data-icon="lucide:tags" data-width="20"></span></div><div><div class="text-sm font-bold font-display text-gray-900">Usage, Billing, Tenure</div><div class="text-xs text-gray-600">Main Features</div></div></div>
+      <div class="glass p-4 flex items-center gap-3"><div class="icon-box bg-orange-100 text-orange-600"><span class="iconify" data-icon="lucide:file-type" data-width="20"></span></div><div><div class="text-sm font-bold font-display text-gray-900">Numeric + Categorical</div><div class="text-xs text-gray-600">Data Types</div></div></div>
+    </div>
+    <div class="glass p-4 animate-in flex flex-col items-center">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-2 font-semibold">Plan Distribution</div>
+      <canvas id="pieChart1" width="200" height="200"></canvas>
+    </div>
+    <div class="glass p-4 animate-in flex flex-col items-center">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-2 font-semibold">Network Usage</div>
+      <canvas id="barChart1" width="220" height="200"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 8: PREPROCESSING ============ -->
+<div class="slide" data-slide="8">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">08</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">PREPROCESSING</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">Data Preprocessing</h2>
+  <p class="text-gray-600 text-sm mb-6 animate-in">Transforming raw telecom data into ML-ready features.</p>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+    <div class="glass p-6 animate-in">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">Pipeline</div>
+      <div class="flex flex-col items-center gap-2">
+        <div class="pipeline-step w-full max-w-xs"><span class="iconify inline mr-1" data-icon="lucide:file-input" data-width="14"></span>Raw Data</div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:arrow-down" data-width="20"></span>
+        <div class="pipeline-step w-full max-w-xs"><span class="iconify inline mr-1" data-icon="lucide:eraser" data-width="14"></span>Cleaning</div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:arrow-down" data-width="20"></span>
+        <div class="pipeline-step w-full max-w-xs"><span class="iconify inline mr-1" data-icon="lucide:scale" data-width="14"></span>Normalization</div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:arrow-down" data-width="20"></span>
+        <div class="pipeline-step w-full max-w-xs"><span class="iconify inline mr-1" data-icon="lucide:binary" data-width="14"></span>Encoding</div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:arrow-down" data-width="20"></span>
+        <div class="pipeline-step w-full max-w-xs"><span class="iconify inline mr-1" data-icon="lucide:list-checks" data-width="14"></span>Feature Selection</div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:arrow-down" data-width="20"></span>
+        <div class="pipeline-step w-full max-w-xs" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.25)"><span class="iconify inline mr-1 text-green-600" data-icon="lucide:check-circle" data-width="14"></span>Ready for Clustering</div>
+      </div>
+    </div>
+    <div class="glass p-6 animate-in">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">Before vs After</div>
+      <div class="space-y-2">
+        <div class="bg-red-100 border border-red-300 rounded-lg p-3 text-xs text-red-700"><span class="iconify inline mr-1" data-icon="lucide:alert-triangle" data-width="12"></span>Missing values</div>
+        <div class="bg-green-100 border border-green-300 rounded-lg p-3 text-xs text-green-700"><span class="iconify inline mr-1" data-icon="lucide:check" data-width="12"></span>Clean dataset</div>
+        <div class="bg-red-100 border border-red-300 rounded-lg p-3 text-xs text-red-700"><span class="iconify inline mr-1" data-icon="lucide:alert-triangle" data-width="12"></span>Different scales</div>
+        <div class="bg-green-100 border border-green-300 rounded-lg p-3 text-xs text-green-700"><span class="iconify inline mr-1" data-icon="lucide:check" data-width="12"></span>Normalized features</div>
+        <div class="bg-red-100 border border-red-300 rounded-lg p-3 text-xs text-red-700"><span class="iconify inline mr-1" data-icon="lucide:alert-triangle" data-width="12"></span>Raw categories</div>
+        <div class="bg-green-100 border border-green-300 rounded-lg p-3 text-xs text-green-700"><span class="iconify inline mr-1" data-icon="lucide:check" data-width="12"></span>Encoded variables</div>
+        <div class="bg-red-100 border border-red-300 rounded-lg p-3 text-xs text-red-700"><span class="iconify inline mr-1" data-icon="lucide:alert-triangle" data-width="12"></span>Outliers present</div>
+        <div class="bg-green-100 border border-green-300 rounded-lg p-3 text-xs text-green-700"><span class="iconify inline mr-1" data-icon="lucide:check" data-width="12"></span>Outliers reduced</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 9: METHODOLOGY ============ -->
+<div class="slide" data-slide="9">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">09</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">METHODOLOGY</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">Methodology</h2>
+  <p class="text-gray-600 text-sm mb-6 animate-in">ML clustering models and Agile project management.</p>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+    <div class="animate-in space-y-4">
+      <div class="glass p-4">
+        <div class="text-xs text-gray-500 uppercase tracking-widest mb-3 font-semibold">ML Models</div>
+        <div class="space-y-2">
+          <div class="flex items-center gap-3 bg-ooredoo/10 border border-ooredoo/20 rounded-lg p-3"><span class="iconify text-ooredoo text-xl" data-icon="lucide:star" data-width="18"></span><div class="flex-1"><div class="text-sm font-semibold text-gray-900">K-Means</div><div class="text-xs text-gray-600">Simple, fast, interpretable</div></div><span class="text-xs bg-ooredoo/20 text-ooredoo px-2 py-0.5 rounded-full font-semibold">PRIMARY</span></div>
+          <div class="flex items-center gap-3 bg-blue-100 border border-blue-300 rounded-lg p-3"><span class="iconify text-blue-600" data-icon="lucide:git-branch" data-width="18"></span><div class="flex-1"><div class="text-sm font-semibold text-gray-900">Hierarchical</div><div class="text-xs text-gray-600">Comparison analysis</div></div><span class="text-xs bg-blue-200 text-blue-700 px-2 py-0.5 rounded-full">SECONDARY</span></div>
+          <div class="flex items-center gap-3 bg-purple-100 border border-purple-300 rounded-lg p-3"><span class="iconify text-purple-600" data-icon="lucide:scan" data-width="18"></span><div class="flex-1"><div class="text-sm font-semibold text-gray-900">DBSCAN</div><div class="text-xs text-gray-600">Outlier analysis</div></div><span class="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full">VALIDATION</span></div>
+        </div>
+      </div>
+      <div class="glass p-4 flex flex-col items-center">
+        <div class="text-xs text-gray-500 uppercase tracking-widest mb-2 font-semibold">Elbow Method</div>
+        <canvas id="elbowChart1" width="300" height="160"></canvas>
+      </div>
+    </div>
+    <div class="animate-in space-y-4">
+      <div class="glass p-4 flex flex-col items-center">
+        <div class="text-xs text-gray-500 uppercase tracking-widest mb-2 font-semibold">K-Means Clustering</div>
+        <canvas id="clusterViz1" width="300" height="180"></canvas>
+      </div>
+      <div class="glass p-4">
+        <div class="text-xs text-gray-500 uppercase tracking-widest mb-3 font-semibold">Agile Kanban</div>
+        <div class="grid grid-cols-3 gap-2 text-xs">
+          <div><div class="text-gray-600 font-semibold mb-2 text-center">To Do</div><div class="bg-gray-100 rounded p-2 mb-1 text-gray-700">DB Integration</div><div class="bg-gray-100 rounded p-2 text-gray-700">Auth System</div></div>
+          <div><div class="text-yellow-700 font-semibold mb-2 text-center">In Progress</div><div class="bg-yellow-100 rounded p-2 mb-1 text-yellow-800">Refine Clusters</div><div class="bg-yellow-100 rounded p-2 text-yellow-800">Validation</div></div>
+          <div><div class="text-green-700 font-semibold mb-2 text-center">Done</div><div class="bg-green-100 rounded p-2 mb-1 text-green-800">Data Pipeline</div><div class="bg-green-100 rounded p-2 mb-1 text-green-800">K-Means</div><div class="bg-green-100 rounded p-2 text-green-800">Dashboard</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 10: EVALUATION ============ -->
+<div class="slide" data-slide="10">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">10</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">EVALUATION</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">Evaluation & Results</h2>
+  <p class="text-gray-600 text-sm mb-6 animate-in">3-cluster solution with moderate but meaningful separation.</p>
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
+    <div class="animate-in space-y-4">
+      <div class="kpi-card" style="border-top:3px solid #eab308"><div class="flex items-center justify-center gap-2 mb-2"><span class="metric-light yellow"></span><span class="text-xs text-yellow-600 font-semibold">MODERATE</span></div><div class="text-2xl font-bold font-display text-gray-900">0.0675</div><div class="text-xs text-gray-600 mt-1">Silhouette Score</div></div>
+      <div class="kpi-card" style="border-top:3px solid #ef4444"><div class="flex items-center justify-center gap-2 mb-2"><span class="metric-light red"></span><span class="text-xs text-red-600 font-semibold">NEEDS WORK</span></div><div class="text-2xl font-bold font-display text-gray-900">3.4284</div><div class="text-xs text-gray-600 mt-1">Davies-Bouldin Index</div></div>
+      <div class="kpi-card" style="border-top:3px solid #22c55e"><div class="flex items-center justify-center gap-2 mb-2"><span class="metric-light green"></span><span class="text-xs text-green-600 font-semibold">GOOD</span></div><div class="text-2xl font-bold font-display text-gray-900">2442.84</div><div class="text-xs text-gray-600 mt-1">Calinski-Harabasz</div></div>
+    </div>
+    <div class="glass p-4 animate-in flex flex-col items-center">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-2 font-semibold">Metrics Comparison</div>
+      <canvas id="metricsBar1" width="240" height="240"></canvas>
+    </div>
+    <div class="glass p-4 animate-in flex flex-col items-center">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-2 font-semibold">Cluster Distribution</div>
+      <canvas id="clusterDist1" width="240" height="200"></canvas>
+      <div class="text-xs text-gray-500 mt-4 text-center">Balancing technical quality with business logic</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 11: SEGMENTS ============ -->
+<div class="slide" data-slide="11">
+  <div class="flex items-center gap-3 mb-5 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">11</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">SEGMENTS & IMPACT</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-5 animate-in text-gray-900">Customer Segments</h2>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5 animate-in">
+    <div class="segment-card green"><div class="text-xl mb-1">🟢</div><div class="text-sm font-bold text-green-600">High Value</div><div class="text-xs text-gray-600 mt-1">High spend, loyal</div><div class="text-xs text-green-700 mt-2">Strategy: VIP rewards</div></div>
+    <div class="segment-card blue"><div class="text-xl mb-1">🔵</div><div class="text-sm font-bold text-blue-600">Data Heavy</div><div class="text-xs text-gray-600 mt-1">High data usage</div><div class="text-xs text-blue-700 mt-2">Strategy: Data bundles</div></div>
+    <div class="segment-card yellow"><div class="text-xl mb-1">🟡</div><div class="text-sm font-bold text-yellow-600">Budget Users</div><div class="text-xs text-gray-600 mt-1">Low spend, basic</div><div class="text-xs text-yellow-700 mt-2">Strategy: Value plans</div></div>
+    <div class="segment-card red"><div class="text-xl mb-1">🔴</div><div class="text-sm font-bold text-red-600">At Risk</div><div class="text-xs text-gray-600 mt-1">Churn risk</div><div class="text-xs text-red-700 mt-2">Strategy: Win-back</div></div>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 animate-in">
+    <div class="glass p-4 flex flex-col items-center">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-2 font-semibold">Segment Profile Comparison</div>
+      <canvas id="radarChart1" width="280" height="250"></canvas>
+    </div>
+    <div class="glass p-5">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">Business Impact</div>
+      <div class="space-y-3">
+        <div><div class="flex justify-between text-xs mb-1"><span class="text-gray-900">Campaign Conversion</span><span class="text-gray-600">3.2% → 11.8%</span></div><div class="flex gap-1 items-center"><div class="h-3 rounded-sm bg-red-200" style="width:10%"></div><div class="h-3 rounded-sm bg-green-500" style="width:36%"></div><span class="text-green-600 text-xs font-bold ml-2">+269%</span></div></div>
+        <div><div class="flex justify-between text-xs mb-1"><span class="text-gray-900">Customer Retention</span><span class="text-gray-600">baseline → +15%</span></div><div class="flex gap-1 items-center"><div class="h-3 rounded-sm bg-gray-300" style="width:30%"></div><div class="h-3 rounded-sm bg-green-500" style="width:45%"></div><span class="text-green-600 text-xs font-bold ml-2">+15%</span></div></div>
+        <div><div class="flex justify-between text-xs mb-1"><span class="text-gray-900">Targeting Efficiency</span><span class="text-gray-600">baseline → +20%</span></div><div class="flex gap-1 items-center"><div class="h-3 rounded-sm bg-gray-300" style="width:25%"></div><div class="h-3 rounded-sm bg-green-500" style="width:50%"></div><span class="text-green-600 text-xs font-bold ml-2">+20%</span></div></div>
+        <div><div class="flex justify-between text-xs mb-1"><span class="text-gray-900">Manual Effort</span><span class="text-gray-600">baseline → -75%</span></div><div class="flex gap-1 items-center"><div class="h-3 rounded-sm bg-red-300" style="width:80%"></div><div class="h-3 rounded-sm bg-green-500" style="width:20%"></div><span class="text-green-600 text-xs font-bold ml-2">-75%</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 12: CHALLENGES ============ -->
+<div class="slide" data-slide="12">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">12</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">CHALLENGES</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">Technical Challenges</h2>
+  <p class="text-gray-600 text-sm mb-6 animate-in">Realistic obstacles encountered during development.</p>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 animate-in">
+    <div class="warn-card"><span class="text-yellow-600 text-xl">⚠</span><div><div class="text-sm font-semibold text-gray-900">Clustering Inconsistency</div><div class="text-xs text-gray-600">Difficulty choosing optimal cluster count</div></div></div>
+    <div class="warn-card"><span class="text-yellow-600 text-xl">⚠</span><div><div class="text-sm font-semibold text-gray-900">Preprocessing Complexity</div><div class="text-xs text-gray-600">Scale mismatch, skewed distributions</div></div></div>
+    <div class="warn-card"><span class="text-yellow-600 text-xl">⚠</span><div><div class="text-sm font-semibold text-gray-900">Feature Engineering</div><div class="text-xs text-gray-600">Business-weak clusters</div></div></div>
+    <div class="warn-card"><span class="text-yellow-600 text-xl">⚠</span><div><div class="text-sm font-semibold text-gray-900">Pipeline Debugging</div><div class="text-xs text-gray-600">End-to-end complexity</div></div></div>
+    <div class="warn-card"><span class="text-yellow-600 text-xl">⚠</span><div><div class="text-sm font-semibold text-gray-900">Tool Learning Curve</div><div class="text-xs text-gray-600">Unfamiliar libraries</div></div></div>
+    <div class="warn-card"><span class="text-yellow-600 text-xl">⚠</span><div><div class="text-sm font-semibold text-gray-900">Interpretation Gap</div><div class="text-xs text-gray-600">Technical to business translation</div></div></div>
+  </div>
+  <div class="glass p-4 mt-4 animate-in"><div class="text-xs text-gray-500 uppercase tracking-widest mb-3 font-semibold">Cluster Quality Improvement</div><div class="grid grid-cols-2 gap-4"><div class="text-center"><div class="text-xs text-red-600 mb-1">Initial Attempt</div><div class="text-lg font-bold font-display text-red-600">0.031</div><div class="text-xs text-gray-600">Silhouette Score</div></div><div class="text-center"><div class="text-xs text-green-600 mb-1">After Optimization</div><div class="text-lg font-bold font-display text-green-600">0.0675</div><div class="text-xs text-gray-600">Silhouette Score (+118%)</div></div></div></div>
+</div>
+
+<!-- ============ SLIDE 13: TOOLS ============ -->
+<div class="slide" data-slide="13">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">13</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">TECHNOLOGY</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">Tools & Technologies</h2>
+  <p class="text-gray-600 text-sm mb-6 animate-in">Modern tech stack organized by architecture layer.</p>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+    <div class="glass p-6 animate-in">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">Architecture Layers</div>
+      <div class="space-y-3">
+        <div class="bg-blue-100 border border-blue-300 rounded-lg p-4"><div class="flex items-center gap-2 mb-2"><span class="iconify text-blue-600" data-icon="lucide:monitor" data-width="16"></span><span class="text-sm font-semibold text-blue-900">Frontend</span></div><div class="flex flex-wrap gap-2"><span class="tech-badge">React</span><span class="tech-badge">Vite</span><span class="tech-badge">TypeScript</span><span class="tech-badge">HTML/CSS</span></div></div>
+        <div class="bg-green-100 border border-green-300 rounded-lg p-4"><div class="flex items-center gap-2 mb-2"><span class="iconify text-green-600" data-icon="lucide:server" data-width="16"></span><span class="text-sm font-semibold text-green-900">Backend</span></div><div class="flex flex-wrap gap-2"><span class="tech-badge">FastAPI</span><span class="tech-badge">Uvicorn</span></div></div>
+        <div class="bg-purple-100 border border-purple-300 rounded-lg p-4"><div class="flex items-center gap-2 mb-2"><span class="iconify text-purple-600" data-icon="lucide:brain-circuit" data-width="16"></span><span class="text-sm font-semibold text-purple-900">ML Engine</span></div><div class="flex flex-wrap gap-2"><span class="tech-badge">scikit-learn</span><span class="tech-badge">pandas</span><span class="tech-badge">numpy</span></div></div>
+        <div class="bg-orange-100 border border-orange-300 rounded-lg p-4"><div class="flex items-center gap-2 mb-2"><span class="iconify text-orange-600" data-icon="lucide:file-search" data-width="16"></span><span class="text-sm font-semibold text-orange-900">Validation & Data</span></div><div class="flex flex-wrap gap-2"><span class="tech-badge">Jupyter</span><span class="tech-badge">CSV</span><span class="tech-badge">JSON</span><span class="tech-badge">YAML</span></div></div>
+      </div>
+    </div>
+    <div class="glass p-6 animate-in flex flex-col justify-center">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold text-center">Data Flow</div>
+      <div class="flex flex-col items-center gap-3">
+        <div class="w-full max-w-xs bg-blue-100 border border-blue-300 rounded-lg p-3 text-center text-sm"><span class="iconify inline mr-1 text-blue-600" data-icon="lucide:monitor" data-width="16"></span><span class="text-gray-900">React Frontend</span></div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:arrow-down" data-width="20"></span>
+        <div class="w-full max-w-xs bg-green-100 border border-green-300 rounded-lg p-3 text-center text-sm"><span class="iconify inline mr-1 text-green-600" data-icon="lucide:server" data-width="16"></span><span class="text-gray-900">FastAPI Backend</span></div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:arrow-down" data-width="20"></span>
+        <div class="w-full max-w-xs bg-purple-100 border border-purple-300 rounded-lg p-3 text-center text-sm"><span class="iconify inline mr-1 text-purple-600" data-icon="lucide:brain-circuit" data-width="16"></span><span class="text-gray-900">ML Engine</span></div>
+        <span class="iconify text-ooredoo/50" data-icon="lucide:arrow-down" data-width="20"></span>
+        <div class="w-full max-w-xs bg-ooredoo/10 border border-ooredoo/20 rounded-lg p-3 text-center text-sm"><span class="iconify inline mr-1 text-ooredoo" data-icon="lucide:layout-dashboard" data-width="16"></span><span class="text-gray-900">Results Dashboard</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 14: ARCHITECTURE ============ -->
+<div class="slide" data-slide="14">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">14</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">ARCHITECTURE</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-2 animate-in text-gray-900">System Architecture</h2>
+  <p class="text-gray-600 text-sm mb-6 animate-in">End-to-end workflow from data upload to business insights.</p>
+  <div class="glass p-6 animate-in glow-red relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse at 50% 50%,rgba(237,28,36,.03) 0%,transparent 70%)"></div>
+    <div class="relative z-10">
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-4 items-start">
+        <div class="flex flex-col items-center gap-2"><div class="w-14 h-14 rounded-xl bg-ooredoo/15 border border-ooredoo/30 flex items-center justify-center"><span class="iconify text-ooredoo" data-icon="lucide:upload" data-width="24"></span></div><span class="text-xs font-semibold text-gray-900">Data Upload</span><span class="text-[10px] text-gray-600 text-center">CSV customer data</span></div>
+        <div class="hidden md:flex items-center justify-center pt-4"><span class="iconify text-ooredoo/40" data-icon="lucide:chevron-right" data-width="28"></span></div>
+        <div class="flex flex-col items-center gap-2"><div class="w-14 h-14 rounded-xl bg-blue-100 border border-blue-300 flex items-center justify-center"><span class="iconify text-blue-600" data-icon="lucide:cpu" data-width="24"></span></div><span class="text-xs font-semibold text-gray-900">Processing</span><span class="text-[10px] text-gray-600 text-center">Clean, normalize</span></div>
+        <div class="hidden md:flex items-center justify-center pt-4"><span class="iconify text-ooredoo/40" data-icon="lucide:chevron-right" data-width="28"></span></div>
+        <div class="flex flex-col items-center gap-2"><div class="w-14 h-14 rounded-xl bg-purple-100 border border-purple-300 flex items-center justify-center pulse-glow"><span class="iconify text-purple-600" data-icon="lucide:brain-circuit" data-width="24"></span></div><span class="text-xs font-semibold text-gray-900">Clustering</span><span class="text-[10px] text-gray-600 text-center">K-Means engine</span></div>
+        <div class="hidden md:flex items-center justify-center pt-4"><span class="iconify text-ooredoo/40" data-icon="lucide:chevron-right" data-width="28"></span></div>
+        <div class="flex flex-col items-center gap-2"><div class="w-14 h-14 rounded-xl bg-green-100 border border-green-300 flex items-center justify-center"><span class="iconify text-green-600" data-icon="lucide:layout-dashboard" data-width="24"></span></div><span class="text-xs font-semibold text-gray-900">Dashboard</span><span class="text-[10px] text-gray-600 text-center">Insights & metrics</span></div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+        <div class="bg-gray-100 border border-gray-300 rounded-lg p-3 text-center"><span class="iconify text-ooredoo mb-1" data-icon="lucide:database" data-width="18"></span><div class="text-xs font-medium text-gray-900">FastAPI Server</div><div class="text-[10px] text-gray-600">REST endpoints</div></div>
+        <div class="bg-gray-100 border border-gray-300 rounded-lg p-3 text-center"><span class="iconify text-blue-600 mb-1" data-icon="lucide:shuffle" data-width="18"></span><div class="text-xs font-medium text-gray-900">Pipeline</div><div class="text-[10px] text-gray-600">Automated flow</div></div>
+        <div class="bg-gray-100 border border-gray-300 rounded-lg p-3 text-center"><span class="iconify text-purple-600 mb-1" data-icon="lucide:calculator" data-width="18"></span><div class="text-xs font-medium text-gray-900">Metrics Engine</div><div class="text-[10px] text-gray-600">Silhouette, DB, CH</div></div>
+        <div class="bg-gray-100 border border-gray-300 rounded-lg p-3 text-center"><span class="iconify text-green-600 mb-1" data-icon="lucide:bar-chart-3" data-width="18"></span><div class="text-xs font-medium text-gray-900">React Dashboard</div><div class="text-[10px] text-gray-600">Interactive UI</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 15: LIMITATIONS ============ -->
+<div class="slide" data-slide="15">
+  <div class="flex items-center gap-3 mb-6 animate-in"><span class="text-xs font-mono text-ooredoo font-bold">15</span><div class="h-px flex-1 bg-gray-300"></div><span class="text-xs text-gray-500">NEXT STEPS</span></div>
+  <h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight mb-6 animate-in text-gray-900">Limitations & Roadmap</h2>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+    <div class="glass p-6 animate-in">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">Current Limitations</div>
+      <div class="space-y-3">
+        <div class="flex items-center gap-3 text-sm"><span class="iconify text-red-600" data-icon="lucide:x-circle" data-width="16"></span><span class="text-gray-900">No database integration yet</span></div>
+        <div class="flex items-center gap-3 text-sm"><span class="iconify text-red-600" data-icon="lucide:x-circle" data-width="16"></span><span class="text-gray-900">Authentication not implemented</span></div>
+        <div class="flex items-center gap-3 text-sm"><span class="iconify text-yellow-600" data-icon="lucide:alert-circle" data-width="16"></span><span class="text-gray-900">Segmentation still improvable</span></div>
+        <div class="flex items-center gap-3 text-sm"><span class="iconify text-yellow-600" data-icon="lucide:alert-circle" data-width="16"></span><span class="text-gray-900">Prototype stage</span></div>
+      </div>
+    </div>
+    <div class="glass p-6 animate-in">
+      <div class="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">Future Roadmap</div>
+      <div class="space-y-5">
+        <div class="roadmap-step"><div class="roadmap-dot done"><span class="iconify text-white" data-icon="lucide:check" data-width="10"></span></div><div><div class="text-sm font-semibold text-gray-900">Current Prototype</div><div class="text-xs text-gray-600">Working pipeline & dashboard</div></div></div>
+        <div class="roadmap-step"><div class="roadmap-dot current"><span class="iconify text-ooredoo" data-icon="lucide:circle" data-width="8"></span></div><div><div class="text-sm font-semibold text-ooredoo">Improve Clustering</div><div class="text-xs text-gray-600">Better features, algorithms</div></div></div>
+        <div class="roadmap-step"><div class="roadmap-dot"><span class="iconify text-gray-600" data-icon="lucide:circle" data-width="8"></span></div><div><div class="text-sm font-semibold text-gray-900">Database Integration</div><div class="text-xs text-gray-600">PostgreSQL / MongoDB</div></div></div>
+        <div class="roadmap-step"><div class="roadmap-dot"><span class="iconify text-gray-600" data-icon="lucide:circle" data-width="8"></span></div><div><div class="text-sm font-semibold text-gray-900">Authentication</div><div class="text-xs text-gray-600">JWT user management</div></div></div>
+        <div class="roadmap-step"><div class="roadmap-dot"><span class="iconify text-gray-600" data-icon="lucide:circle" data-width="8"></span></div><div><div class="text-sm font-semibold text-gray-900">Production Deployment</div><div class="text-xs text-gray-600">Docker, CI/CD, monitoring</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SLIDE 16: CONCLUSION ============ -->
+<div class="slide" data-slide="16">
+  <div class="flex-1 flex flex-col items-center justify-center text-center relative">
+    <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <div class="w-[600px] h-[600px] rounded-full" style="background:radial-gradient(circle,rgba(237,28,36,.06) 0%,transparent 70%)"></div>
+    </div>
+    <div class="animate-in relative z-10 mb-6">
+      <div class="inline-flex items-center gap-3 bg-ooredoo/10 border border-ooredoo/20 rounded-full px-5 py-2">
+        <span class="iconify text-ooredoo" data-icon="lucide:sparkles" data-width="18"></span>
+        <span class="text-ooredoo text-xs font-semibold tracking-widest uppercase">Conclusion</span>
+      </div>
+    </div>
+    <h2 class="animate-in font-display text-3xl md:text-5xl font-bold tracking-tight mb-4 relative z-10 leading-tight text-gray-900">
+      Transforming telecom customer data<br>into <span class="text-ooredoo">intelligent business decisions</span>
+    </h2>
+    <p class="animate-in text-gray-600 text-sm max-w-xl mb-8 relative z-10 leading-relaxed">
+      AI-driven analytics enabling smarter customer understanding, better retention strategies, and future-ready telecom operations.
+    </p>
+    <div class="animate-in grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10 mb-10">
+      <div class="glass p-4 text-center"><span class="iconify text-ooredoo text-2xl mb-2" data-icon="lucide:brain-circuit" data-width="28"></span><div class="text-xs text-gray-600">AI-Driven</div></div>
+      <div class="glass p-4 text-center"><span class="iconify text-green-600 text-2xl mb-2" data-icon="lucide:bar-chart-3" data-width="28"></span><div class="text-xs text-gray-600">BI Insights</div></div>
+      <div class="glass p-4 text-center"><span class="iconify text-blue-600 text-2xl mb-2" data-icon="lucide:users" data-width="28"></span><div class="text-xs text-gray-600">Smarter CX</div></div>
+      <div class="glass p-4 text-center"><span class="iconify text-purple-600 text-2xl mb-2" data-icon="lucide:rocket" data-width="28"></span><div class="text-xs text-gray-600">Future-Ready</div></div>
+    </div>
+    <div class="animate-in flex items-center gap-6 relative z-10">
+      <img src="https://z-cdn-media.chatglm.cn/files/a957dab5-13f7-4ad0-8bcd-9604324f405d.png?auth_key=1878694803-031ff4909b864ff6976495adefc8abb7-0-c3a406c0f7470fb0738882c32fe5e76f" alt="Ooredoo" style="height:32px">
+      <span class="text-gray-400">×</span>
+      <img src="https://z-cdn-media.chatglm.cn/files/dc546249-588f-4987-826a-444da884cd4e.png?auth_key=1878694803-fb318e82988a42fea92326abe1a864b2-0-3dec560b569d920fbe7649e96d6b223a" alt="MUST" style="height:32px">
+    </div>
+  </div>
+</div>
+
+<script>
+const slides=document.querySelectorAll('.slide');const totalSlides=slides.length;let currentSlide=0;
+const dotsContainer=document.getElementById('dotsContainer');const slideCounter=document.getElementById('slideCounter');
+for(let i=0;i<totalSlides;i++){const dot=document.createElement('div');dot.className='nav-dot'+(i===0?' active':'');dot.onclick=()=>goToSlide(i);dotsContainer.appendChild(dot)}
+function updateSlide(){slides.forEach((s,i)=>{s.classList.remove('active','prev');if(i===currentSlide)s.classList.add('active');else if(i<currentSlide)s.classList.add('prev')});dotsContainer.querySelectorAll('.nav-dot').forEach((d,i)=>{d.classList.toggle('active',i===currentSlide)});slideCounter.textContent=String(currentSlide+1).padStart(2,'0')+' / '+String(totalSlides).padStart(2,'0')}
+function nextSlide(){if(currentSlide<totalSlides-1){currentSlide++;updateSlide()}}function prevSlide(){if(currentSlide>0){currentSlide--;updateSlide()}}function goToSlide(n){currentSlide=n;updateSlide()}
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')nextSlide();if(e.key==='ArrowLeft')prevSlide()});
+
+// Canvas Drawing Utilities
+function setupCanvas(id){const c=document.getElementById(id);if(!c)return null;const dpr=window.devicePixelRatio||1;const w=parseInt(c.getAttribute('width'))||280;const h=parseInt(c.getAttribute('height'))||280;c.width=w*dpr;c.height=h*dpr;c.style.width=w+'px';c.style.height=h+'px';const ctx=c.getContext('2d');ctx.scale(dpr,dpr);return{ctx,w,h}}
+
+function drawDonut(ctx,w,h,data,colors){const cx=w/2,cy=h/2;const r=Math.max(10,Math.min(w,h)/2-20);const inner=r*0.55;let total=data.reduce((a,b)=>a+b,0);let angle=-Math.PI/2;data.forEach((val,i)=>{const slice=val/total*Math.PI*2;ctx.beginPath();ctx.arc(cx,cy,r,angle,angle+slice);ctx.arc(cx,cy,inner,angle+slice,angle,true);ctx.closePath();ctx.fillStyle=colors[i];ctx.fill();angle+=slice});ctx.fillStyle='#1a1a1a';ctx.font='bold 20px Manrope';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('100%',cx,cy-6);ctx.font='10px Inter';ctx.fillStyle='#737373';ctx.fillText('Total Usage',cx,cy+12)}
+
+function drawPie(ctx,w,h,data,colors,labels){const cx=w/2,cy=h/2;const r=Math.max(10,Math.min(w,h)/2-30);let total=data.reduce((a,b)=>a+b,0);let angle=-Math.PI/2;data.forEach((val,i)=>{const slice=val/total*Math.PI*2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,angle,angle+slice);ctx.closePath();ctx.fillStyle=colors[i];ctx.fill();const mid=angle+slice/2;const lx=cx+Math.cos(mid)*(r*0.65);const ly=cy+Math.sin(mid)*(r*0.65);ctx.fillStyle='#1a1a1a';ctx.font='bold 11px Inter';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(Math.round(val/total*100)+'%',lx,ly);angle+=slice});labels.forEach((l,i)=>{const ly=h-((labels.length-1-i)*16);ctx.fillStyle=colors[i];ctx.fillRect(8,ly-4,8,8);ctx.fillStyle='#737373';ctx.font='10px Inter';ctx.textAlign='left';ctx.fillText(l,20,ly)})}
+
+function drawBarChart(ctx,w,h,data,colors,labels){const maxVal=Math.max(...data)*1.2;const barW=Math.max(5,(w-60)/data.length*0.6);const gap=(w-60)/data.length;const chartH=h-40;data.forEach((val,i)=>{const barH=val/maxVal*chartH;const x=40+i*gap+gap/2-barW/2;const y=chartH-barH+10;ctx.fillStyle=colors[i];ctx.beginPath();ctx.roundRect(x,y,barW,barH,4);ctx.fill();ctx.fillStyle='#1a1a1a';ctx.font='bold 10px Inter';ctx.textAlign='center';ctx.fillText(val,x+barW/2,y-6);ctx.fillStyle='#737373';ctx.font='10px Inter';ctx.fillText(labels[i],x+barW/2,h-4)})}
+
+function drawElbow(ctx,w,h){const data=[420,310,180,140,120,110,105];const chartH=h-30;const chartW=w-50;const maxVal=450;ctx.strokeStyle='rgba(0,0,0,0.08)';ctx.lineWidth=1;for(let i=0;i<4;i++){const y=10+i*(chartH/3);ctx.beginPath();ctx.moveTo(40,y);ctx.lineTo(w-10,y);ctx.stroke()}ctx.beginPath();ctx.strokeStyle='#ED1C24';ctx.lineWidth=2;data.forEach((v,i)=>{const x=40+i*(chartW/(data.length-1));const y=10+chartH-(v/maxVal*chartH);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.stroke();data.forEach((v,i)=>{const x=40+i*(chartW/(data.length-1));const y=10+chartH-(v/maxVal*chartH);ctx.beginPath();const isOptimal=(i===2);ctx.arc(x,y,isOptimal?6:4,0,Math.PI*2);ctx.fillStyle=isOptimal?'#ED1C24':'rgba(237,28,36,0.5)';ctx.fill();if(isOptimal){ctx.fillStyle='#1a1a1a';ctx.font='bold 10px Inter';ctx.textAlign='center';ctx.fillText('K=3 ✓',x,y-16)}ctx.fillStyle='#737373';ctx.font='9px Inter';ctx.textAlign='center';ctx.fillText('K='+(i+1),x,h-4)})}
+
+function drawClusterViz(ctx,w,h){const clusters=[{cx:w*0.25,cy:h*0.35,color:'rgba(237,28,36,0.7)',label:'Cluster 1'},{cx:w*0.6,cy:h*0.6,color:'rgba(59,130,246,0.7)',label:'Cluster 2'},{cx:w*0.75,cy:h*0.25,color:'rgba(34,197,94,0.7)',label:'Cluster 3'}];const rand=(s)=>{let x=Math.sin(s)*43758.5453;return x-Math.floor(x)};clusters.forEach((cl,ci)=>{for(let i=0;i<30;i++){const x=cl.cx+(rand(ci*100+i)-0.5)*w*0.22;const y=cl.cy+(rand(ci*200+i+50)-0.5)*h*0.35;ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fillStyle=cl.color;ctx.fill()}ctx.beginPath();ctx.arc(cl.cx,cl.cy,8,0,Math.PI*2);ctx.fillStyle=cl.color;ctx.fill();ctx.strokeStyle='#1a1a1a';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#1a1a1a';ctx.font='bold 10px Inter';ctx.textAlign='center';ctx.fillText(cl.label,cl.cx,cl.cy-16)})}
+
+function drawMetricsBar(ctx,w,h){const labels=['Silhouette','Davies-Bouldin','Calinski-H.'];const raw=[0.0675,3.4284,2442.84];const normalized=[67.5,34.3,80];const colors=['#eab308','#ef4444','#22c55e'];const chartH=h-50;const barW=50;const gap=(w-60)/3;normalized.forEach((val,i)=>{const barH=val/100*chartH*0.8;const x=30+i*gap+gap/2-barW/2;const y=chartH-barH+10;const grad=ctx.createLinearGradient(x,y,x,chartH+10);grad.addColorStop(0,colors[i]);grad.addColorStop(1,'rgba(0,0,0,0.1)');ctx.fillStyle=grad;ctx.beginPath();ctx.roundRect(x,y,barW,barH,6);ctx.fill();ctx.fillStyle='#1a1a1a';ctx.font='bold 11px Inter';ctx.textAlign='center';ctx.fillText(raw[i].toString(),x+barW/2,y-8);ctx.fillStyle='#737373';ctx.font='9px Inter';ctx.fillText(labels[i],x+barW/2,h-4);ctx.beginPath();ctx.arc(x+barW/2,y-22,4,0,Math.PI*2);ctx.fillStyle=colors[i];ctx.fill()})}
+
+function drawClusterDist(ctx,w,h){const data=[180,200,120];const total=data.reduce((a,b)=>a+b,0);const colors=['#ED1C24','#3b82f6','#22c55e'];const labels=['Cluster 1','Cluster 2','Cluster 3'];const cx=w/2,cy=h/2-10;const r=Math.max(10,Math.min(w,h)/2-30);const inner=r*0.5;let angle=-Math.PI/2;data.forEach((val,i)=>{const slice=val/total*Math.PI*2;ctx.beginPath();ctx.arc(cx,cy,r,angle,angle+slice);ctx.arc(cx,cy,inner,angle+slice,angle,true);ctx.closePath();ctx.fillStyle=colors[i];ctx.fill();const mid=angle+slice/2;const lx=cx+Math.cos(mid)*(r*0.75);const ly=cy+Math.sin(mid)*(r*0.75);ctx.fillStyle='#1a1a1a';ctx.font='bold 10px Inter';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(Math.round(val/total*100)+'%',lx,ly);angle+=slice});ctx.fillStyle='#1a1a1a';ctx.font='bold 14px Manrope';ctx.textAlign='center';ctx.fillText('500',cx,cy-4);ctx.fillStyle='#737373';ctx.font='9px Inter';ctx.fillText('customers',cx,cy+10)}
+
+function drawRadar(ctx,w,h){const cx=w/2,cy=h/2;const r=Math.max(10,Math.min(w,h)/2-30);const labels=['Spend','Data','Voice','Tenure'];const n=labels.length;const datasets=[{values:[0.9,0.5,0.6,0.8],color:'rgba(34,197,94,0.3)',stroke:'#22c55e'},{values:[0.4,0.9,0.3,0.5],color:'rgba(59,130,246,0.3)',stroke:'#3b82f6'},{values:[0.3,0.4,0.3,0.3],color:'rgba(234,179,8,0.3)',stroke:'#eab308'},{values:[0.2,0.2,0.2,0.2],color:'rgba(239,68,68,0.3)',stroke:'#ef4444'}];for(let level=1;level<=4;level++){ctx.beginPath();for(let i=0;i<=n;i++){const angle=-Math.PI/2+(i%n)*(Math.PI*2/n);const lr=r*level/4;const x=cx+Math.cos(angle)*lr;const y=cy+Math.sin(angle)*lr;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}ctx.closePath();ctx.strokeStyle='rgba(0,0,0,0.08)';ctx.lineWidth=1;ctx.stroke()}for(let i=0;i<n;i++){const angle=-Math.PI/2+i*(Math.PI*2/n);const x=cx+Math.cos(angle)*r;const y=cy+Math.sin(angle)*r;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.strokeStyle='rgba(0,0,0,0.08)';ctx.stroke();const lx=cx+Math.cos(angle)*(r+16);const ly=cy+Math.sin(angle)*(r+16);ctx.fillStyle='#737373';ctx.font='10px Inter';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(labels[i],lx,ly)}datasets.forEach(ds=>{ctx.beginPath();for(let i=0;i<=n;i++){const angle=-Math.PI/2+(i%n)*(Math.PI*2/n);const lr=r*ds.values[i%n];const x=cx+Math.cos(angle)*lr;const y=cy+Math.sin(angle)*lr;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}ctx.closePath();ctx.fillStyle=ds.color;ctx.fill();ctx.strokeStyle=ds.stroke;ctx.lineWidth=1.5;ctx.stroke()})}
+
+function drawChartsForSlide(slideIndex){
+  setTimeout(()=>{
+    if(slideIndex===2){const d=setupCanvas('donutChart1');if(d)drawDonut(d.ctx,d.w,d.h,[45,25,20,10],['#ED1C24','#3b82f6','#22c55e','#f97316'])}
+    if(slideIndex===7){const p=setupCanvas('pieChart1');if(p)drawPie(p.ctx,p.w,p.h,[55,45],['#ED1C24','#3b82f6'],['Prepaid 55%','Postpaid 45%']);const b=setupCanvas('barChart1');if(b)drawBarChart(b.ctx,b.w,b.h,[15,45,40],['#f97316','#3b82f6','#22c55e'],['3G','4G','5G'])}
+    if(slideIndex===9){const e=setupCanvas('elbowChart1');if(e)drawElbow(e.ctx,e.w,e.h);const c=setupCanvas('clusterViz1');if(c)drawClusterViz(c.ctx,c.w,c.h)}
+    if(slideIndex===10){const m=setupCanvas('metricsBar1');if(m)drawMetricsBar(m.ctx,m.w,m.h);const cd=setupCanvas('clusterDist1');if(cd)drawClusterDist(cd.ctx,cd.w,cd.h)}
+    if(slideIndex===11){const r=setupCanvas('radarChart1');if(r)drawRadar(r.ctx,r.w,r.h)}
+  },100);
+}
+
+// Draw all charts immediately so they are ready for PDF export
+function initAllCharts() { [2, 7, 9, 10, 11].forEach(i => drawChartsForSlide(i)); }
+window.onload = initAllCharts;
+
+// Handle window resize for interactive mode
+window.addEventListener('resize',()=>drawChartsForSlide(currentSlide));
+</script>
+</body>
+</html>

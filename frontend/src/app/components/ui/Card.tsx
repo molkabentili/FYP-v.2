@@ -1,7 +1,7 @@
-import { PropsWithChildren } from 'react'
+import { HTMLAttributes, PropsWithChildren } from 'react'
 
-export function Card({ children, className = '' }: PropsWithChildren<{ className?: string }>) {
-  return <div className={`card ${className}`}>{children}</div>
+export function Card({ children, className = '', ...props }: PropsWithChildren<HTMLAttributes<HTMLDivElement>>) {
+  return <div className={`card ${className}`} {...props}>{children}</div>
 }
 
 export function CardTitle({ children, className = '' }: PropsWithChildren<{ className?: string }>) {

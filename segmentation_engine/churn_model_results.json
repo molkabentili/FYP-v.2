@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-04-14T10:55:22.215219",
+  "models_trained": [
+    "logistic_regression",
+    "random_forest"
+  ],
+  "logistic_regression": {
+    "accuracy": 0.7175301632363378,
+    "precision": 0.7188796680497925,
+    "recall": 0.8451219512195122,
+    "f1": 0.7769058295964125,
+    "auc_roc": 0.748304277609839
+  },
+  "random_forest": {
+    "accuracy": 0.7146912704045423,
+    "precision": 0.7029126213592233,
+    "recall": 0.8829268292682927,
+    "f1": 0.7827027027027027,
+    "auc_roc": 0.7436539815313264
+  },
+  "feature_importance": [
+    {
+      "feature": "feature_4",
+      "importance": 0.3736503251096612
+    },
+    {
+      "feature": "feature_16",
+      "importance": 0.18758597203874763
+    },
+    {
+      "feature": "feature_17",
+      "importance": 0.09971047570204251
+    },
+    {
+      "feature": "feature_13",
+      "importance": 0.05832010517913731
+    },
+    {
+      "feature": "feature_6",
+      "importance": 0.033311272633025725
+    },
+    {
+      "feature": "feature_15",
+      "importance": 0.029742822697745006
+    },
+    {
+      "feature": "feature_8",
+      "importance": 0.024747499486243822
+    },
+    {
+      "feature": "feature_11",
+      "importance": 0.024392542113346752
+    },
+    {
+      "feature": "feature_9",
+      "importance": 0.024231727299282406
+    },
+    {
+      "feature": "feature_7",
+      "importance": 0.024161584678473458
+    }
+  ]
+}

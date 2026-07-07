@@ -72,6 +72,19 @@ class CompareAlgorithmsRequest(BaseModel):
         }
 
 
+class CustomerExportRequest(BaseModel):
+    """Request targeted customer extraction for campaign activation."""
+    segmented_csv: str = Field(..., description="Path to segmented CSV returned by clustering")
+    export_format: str = Field(default="csv", description="Export format: 'csv' or 'excel'")
+    segment: Optional[str] = Field(default=None, description="Business segment filter")
+    behavioral_group: Optional[str] = Field(default=None, description="Deprecated; behavioral exports are no longer produced")
+    region: Optional[str] = Field(default=None, description="Region filter")
+    city: Optional[str] = Field(default=None, description="City filter")
+    churn_risk: Optional[str] = Field(default=None, description="Churn risk label filter")
+    min_arpu: Optional[float] = Field(default=None, description="Minimum ARPU in TND")
+    max_arpu: Optional[float] = Field(default=None, description="Maximum ARPU in TND")
+
+
 # ============================================================================
 # RESPONSE MODELS
 # ============================================================================
@@ -82,10 +95,14 @@ class PreprocessResponse(BaseModel):
     dataset_name: str
     original_shape: List[int]
     cleaned_shape: List[int]
-    features_used: List[str]
-    dropped_columns: Dict[str, List[str]]
+    features_used: List[str] = Field(default_factory=list)
+    dropped_columns: Optional[Any] = Field(default_factory=list)
     output_file: str
+    output_filename: Optional[str] = None
     message: str
+
+    class Config:
+        extra = "allow"
 
 
 class ClusterMetrics(BaseModel):
@@ -110,8 +127,16 @@ class ClusteringResponse(BaseModel):
     configuration: Dict[str, Any]
     n_clusters: int
     labels: List[int]
+    labels_full_count: Optional[int] = None
     metrics: ClusterMetrics
     cluster_statistics: List[ClusterStatistics]
+    segmentation_rule_version: Optional[str] = None
+    rule_version: Optional[str] = None
+    naming_source: Optional[str] = None
+    clusters: List[Dict[str, Any]] = Field(default_factory=list)
+    business_segments: List[Dict[str, Any]] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    validation: Dict[str, Any] = Field(default_factory=dict)
     output_file: str
     segmented_csv: str
     message: str

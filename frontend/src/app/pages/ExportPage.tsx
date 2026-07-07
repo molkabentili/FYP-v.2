@@ -103,7 +103,7 @@ export function ExportPage() {
           <CardTitle>API Integration</CardTitle>
           <div className="mt-3 rounded-lg bg-gray-900 p-4 text-xs text-gray-100">GET https://api.smartseg.ooredoo.com/v1/segments\nAuth: API Key Required\nRate Limit: 1000 req/hour\nFormat: JSON</div>
           <pre className="mt-3 overflow-x-auto rounded-lg bg-gray-100 p-3 text-xs">{`{
-  "segments": [{"name": "High Value Champions", "customers": 2847}],
+  "segments": [{"name": "High Value Customers", "customers": 2847}],
   "metadata": {"model_accuracy": 0.87, "generated_at": "2026-02-27"}
 }`}</pre>
         </Card>

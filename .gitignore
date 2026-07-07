@@ -1,17 +1,103 @@
-# ── Node / Frontend build artifacts ──────────────────────────
-node_modules/
+# Python environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Python caches and build outputs
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+build/
 dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
 
-# Vite cache
+# FastAPI / backend runtime
+*.log
+*.out
+*.err
+uvicorn*.log
+backend.log
+backend.out
+backend.err
+
+# Generated API/runtime data
+api_data/
+segmentation_engine/api_data/
+*_cleaned.csv
+segmented_*.csv
+clustering_*.json
+targeted_customers_*.csv
+targeted_customers_*.xls
+targeted_customers_*.xlsx
+
+# Machine learning generated artifacts
+*.pkl
+*.pickle
+*.joblib
+*.model
+*.onnx
+*.h5
+*.hdf5
+mlruns/
+wandb/
+
+# Node / React / Vite
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
 .vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# ── Environment / secrets ─────────────────────────────────────
+# TypeScript generated files
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# Environment and secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.sample
 
-# ── OS / Editor ───────────────────────────────────────────────
+# IDE / editor
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.example.json
+.idea/
+.qodo/
+.claude/
+.agents/
+*.code-workspace
+
+# OS files
 .DS_Store
 Thumbs.db
-*.log
-.vscode/settings.json
+Desktop.ini
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+~$*
+nul

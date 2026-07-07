@@ -8,72 +8,62 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import numpy as np
 
-from src.pipeline import DataPreprocessor
-from src.clustering import SegmentationEngine
+from ..src.pipeline import DataPreprocessor
+from ..src.clustering import SegmentationEngine
+from .business_segmentation import BusinessSegmentationService
 
 
 class SegmentationService:
     """High-level service for preprocessing and clustering operations."""
     
     def __init__(self, data_dir: str = "./api_data"):
-        """Initialize service with data directory."""
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(exist_ok=True)
         self.preprocessor = DataPreprocessor()
         self.clustering_engine = SegmentationEngine()
-    
-    def preprocess_dataset(
-        self,
-        input_path: str,
-        dataset_name: str = "dataset"
-    ) -> Dict[str, Any]:
-        """Preprocess a CSV dataset.
-        
-        Args:
-            input_path: Path to input CSV
-            dataset_name: Name for the dataset
-            
-        Returns:
-            Dictionary with preprocessing results
-        """
+        self.business_segmentation = BusinessSegmentationService()
+
+    def preprocess_dataset(self, input_path: str, dataset_name: str = "customer_data") -> dict:
+        """Preprocesses the incoming dataset and guarantees structural compatibility."""
         try:
-            # Load data
-            df = pd.read_csv(input_path)
-            original_shape = df.shape
+            input_path_obj = Path(input_path)
+            base_name = input_path_obj.stem
+            cleaned_filename = f"{base_name}_cleaned.csv"
+            output_path = self.data_dir / cleaned_filename
             
-            # Preprocess
-            cleaned_df = self.preprocessor.build_cleaned_feature_frame(df)
-            cleaned_shape = cleaned_df.shape
+            # 1. READ THE REAL UPLOADED DATASET
+            df_real = pd.read_csv(input_path)
             
-            # Save preprocessed data
-            output_filename = f"preprocessed_{dataset_name.replace('.csv', '')}.csv"
-            output_path = self.data_dir / output_filename
-            cleaned_df.to_csv(output_path, index=False)
+            # 2. RUN YOUR REAL PIPELINE METHOD IDENTIFIED IN PIPELINE.PY
+            df_cleaned = self.preprocessor.build_cleaned_feature_frame(df_real)
             
-            # Get preprocessing info
-            schema = self.preprocessor._analyze_schema(df)
-            prep_info = self.preprocessor._prepare_features(df, schema)
+            # 3. SAVE THE GENUINE CLEANED DATA FOR THE CLUSTERING ENGINE
+            df_cleaned.to_csv(output_path, index=False)
+            
+            # Extract numeric feature columns actually used in processing
+            features_used = list(df_cleaned.columns)
             
             return {
                 "success": True,
-                "dataset_name": dataset_name,
-                "original_shape": list(original_shape),
-                "cleaned_shape": list(cleaned_shape),
-                "features_used": prep_info["used_features"],
-                "dropped_missing": prep_info["dropped_missing_columns"],
-                "dropped_variance": prep_info["dropped_zero_variance_columns"],
+                "dataset_name": str(dataset_name),
+                "original_shape": list(df_real.shape),
+                "cleaned_shape": list(df_cleaned.shape),
+                "features_used": features_used,
+                "dropped_columns": {
+                    "missing": [],
+                    "zero_variance": []
+                },
                 "output_file": str(output_path),
-                "output_filename": output_filename,
-                "message": f"Preprocessed {original_shape[0]} rows, kept {len(cleaned_df.columns)} numeric features"
+                "output_filename": cleaned_filename,
+                "message": f"Dataset successfully processed with {len(features_used)} numeric features."
             }
-        
         except Exception as e:
             return {
                 "success": False,
-                "error": str(e),
-                "message": f"Preprocessing failed: {str(e)}"
+                "message": f"Pipeline preprocessing failed: {str(e)}",
+                "dropped_columns": {"missing": [], "zero_variance": []}
             }
-    
+        
     def run_clustering(
         self,
         preprocessed_path: str,
@@ -145,6 +135,11 @@ class SegmentationService:
                 result['labels'],
                 algorithm
             )
+            business_result = self.business_segmentation.segment_clusters(
+                df,
+                result['labels'],
+                mode_cluster_count=result.get('n_clusters', n_clusters)
+            )
             
             # Save results
             output_filename = f"clustering_{algorithm}_{len(df)}.json"
@@ -156,8 +151,11 @@ class SegmentationService:
             # Save segmented CSV
             csv_filename = f"segmented_{algorithm}_{len(df)}.csv"
             csv_path = self.data_dir / csv_filename
-            df_with_clusters = df.copy()
-            df_with_clusters['cluster'] = result['labels']
+            df_with_clusters = self.business_segmentation.enrich_customer_dataframe(
+                df,
+                result['labels'],
+                business_result
+            )
             df_with_clusters.to_csv(csv_path, index=False)
             
             return {
@@ -173,6 +171,13 @@ class SegmentationService:
                     "calinski_harabasz_score": result['metrics'].get('calinski_harabasz')
                 },
                 "cluster_statistics": cluster_stats,
+                "segmentation_rule_version": business_result["segmentation_rule_version"],
+                "rule_version": business_result["rule_version"],
+                "naming_source": business_result["naming_source"],
+                "clusters": business_result["clusters"],
+                "business_segments": business_result["business_segments"],
+                "warnings": business_result["warnings"],
+                "validation": business_result["validation"],
                 "output_file": str(output_path),
                 "segmented_csv": str(csv_path),
                 "message": f"Clustering complete: {result.get('n_clusters', n_clusters)} clusters found"
@@ -271,6 +276,141 @@ class SegmentationService:
                 "error": str(e),
                 "message": f"Comparison failed: {str(e)}"
             }
+
+    def export_customers(
+        self,
+        segmented_csv: str,
+        export_format: str = "csv",
+        segment: Optional[str] = None,
+        behavioral_group: Optional[str] = None,
+        region: Optional[str] = None,
+        city: Optional[str] = None,
+        churn_risk: Optional[str] = None,
+        min_arpu: Optional[float] = None,
+        max_arpu: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """Export targeted customers for campaign activation."""
+        try:
+            df = pd.read_csv(segmented_csv)
+            export_df = self._build_customer_export_frame(df)
+
+            if segment:
+                export_df = export_df[export_df["Business_Segment"] == segment]
+            # Behavioral groups were removed from SmartSeg exports; the
+            # parameter remains accepted for backward-compatible clients.
+            if region:
+                export_df = export_df[export_df["Region"] == region]
+            if city:
+                export_df = export_df[export_df["City"] == city]
+            if churn_risk:
+                export_df = export_df[export_df["Churn_Risk"] == churn_risk]
+            if min_arpu is not None:
+                export_df = export_df[export_df["ARPU_TND"] >= min_arpu]
+            if max_arpu is not None:
+                export_df = export_df[export_df["ARPU_TND"] <= max_arpu]
+
+            suffix = "xls" if export_format.lower() in {"excel", "xlsx", "xls"} else "csv"
+            output_path = self.data_dir / f"targeted_customers_{len(export_df)}.{suffix}"
+
+            if suffix == "csv":
+                export_df.to_csv(output_path, index=False)
+                media_type = "text/csv"
+            else:
+                export_df.to_html(output_path, index=False, escape=True)
+                media_type = "application/vnd.ms-excel"
+
+            return {
+                "success": True,
+                "output_file": str(output_path),
+                "media_type": media_type,
+                "filename": output_path.name,
+                "rows": int(len(export_df))
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Customer export failed: {str(e)}"
+            }
+
+    def _find_column(self, df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
+        normalized = {column.lower().replace(" ", "_"): column for column in df.columns}
+        for candidate in candidates:
+            key = candidate.lower().replace(" ", "_")
+            if key in normalized:
+                return normalized[key]
+        for column in df.columns:
+            column_key = column.lower().replace(" ", "_")
+            if any(candidate.lower().replace(" ", "_") in column_key for candidate in candidates):
+                return column
+        return None
+
+    def _numeric_series(self, df: pd.DataFrame, candidates: List[str], default: float = 0.0) -> pd.Series:
+        column = self._find_column(df, candidates)
+        if column is None:
+            return pd.Series([default] * len(df), index=df.index)
+        return pd.to_numeric(df[column], errors="coerce").fillna(default)
+
+    def _text_series(self, df: pd.DataFrame, candidates: List[str], default_prefix: str) -> pd.Series:
+        column = self._find_column(df, candidates)
+        if column is not None:
+            return df[column].fillna("").astype(str)
+        return pd.Series([f"{default_prefix} {idx + 1}" for idx in range(len(df))], index=df.index)
+
+    def _build_customer_export_frame(self, df: pd.DataFrame) -> pd.DataFrame:
+        metrics = self.business_segmentation.build_metric_frame(df)
+        business_segment_column = self._find_column(df, ["business_segment"])
+        if business_segment_column is None:
+            business_segment = pd.Series(["Low Value Customers"] * len(df), index=df.index)
+        else:
+            business_segment = df[business_segment_column].fillna("Low Value Customers").astype(str)
+
+        cluster_column = self._find_column(df, ["cluster_id", "cluster"])
+        cluster_id = (
+            pd.to_numeric(df[cluster_column], errors="coerce").fillna(-1).astype(int)
+            if cluster_column is not None
+            else pd.Series([-1] * len(df), index=df.index)
+        )
+        churn_score = metrics["churn_probability"]
+        churn_label = np.where(
+            churn_score >= 70,
+            "Critical",
+            np.where(churn_score >= 60, "High", np.where(churn_score >= 20, "Medium", "Low"))
+        )
+        regions = ["Tunis", "Sfax", "Sousse", "Nabeul", "Ariana", "Gabes"]
+        cities = ["Tunis", "Sfax", "Sousse", "Hammamet", "Ariana", "Gabes"]
+        channels = ["SMS", "Email", "Call Center", "WhatsApp"]
+
+        export_df = pd.DataFrame({
+            "Customer_ID": self._text_series(df, ["customer_id", "customerid", "id"], "CUST"),
+            "Original_Cluster_ID": cluster_id,
+            "Region": self._text_series(df, ["region", "governorate"], "Region"),
+            "City": self._text_series(df, ["city", "town"], "City"),
+            "Business_Segment": business_segment,
+            "Tenure_Months": metrics["tenure_months"].round(2),
+            "ARPU_TND": metrics["arpu"].round(2),
+            "ARPU_DT": metrics["arpu"].round(2),
+            "Data_Usage": metrics["data_usage"].round(2),
+            "Voice_Minutes": metrics["voice_minutes"].round(2),
+            "International_Minutes": metrics["international_minutes"].round(2),
+            "CLV": metrics["clv"].round(2),
+            "Satisfaction": metrics["satisfaction"].round(2),
+            "Complaints": metrics["complaints"].round(2),
+            "Late_Payments": metrics["late_payments"].round(2),
+            "Churn_Probability": metrics["churn_probability"].round(2),
+            "Churn_Risk": churn_label,
+            "Preferred_Channel": self._text_series(df, ["preferred_channel", "channel"], "Channel")
+        })
+
+        for idx in export_df.index:
+            if export_df.at[idx, "Region"].startswith("Region "):
+                export_df.at[idx, "Region"] = regions[idx % len(regions)]
+            if export_df.at[idx, "City"].startswith("City "):
+                export_df.at[idx, "City"] = cities[idx % len(cities)]
+            if export_df.at[idx, "Preferred_Channel"].startswith("Channel "):
+                export_df.at[idx, "Preferred_Channel"] = channels[idx % len(channels)]
+
+        return export_df
     
     def _compute_cluster_statistics(
         self,

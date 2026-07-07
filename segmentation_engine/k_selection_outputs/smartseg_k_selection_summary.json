@@ -1,0 +1,31 @@
+{
+  "dataset": "data\\real\\telco_churn_engineered.csv",
+  "rows": 7043,
+  "raw_columns": 29,
+  "features_used": [
+    "SeniorCitizen",
+    "tenure",
+    "MonthlyCharges",
+    "TotalCharges",
+    "estimated_usage_score",
+    "customer_activity_score",
+    "engagement_score",
+    "contract_security_score",
+    "digital_payment_score",
+    "risk_signal_score"
+  ],
+  "n_features_used": 10,
+  "metric_winners": {
+    "Silhouette Score": 2,
+    "Davies-Bouldin Index": 8,
+    "Calinski-Harabasz Index": 2,
+    "Elbow Method": 5
+  },
+  "k5_metrics": {
+    "silhouette_score": 0.30164850255746783,
+    "davies_bouldin_index": 1.1828293010466104,
+    "calinski_harabasz_index": 3208.1078909937455,
+    "inertia": 24945.927238876706
+  },
+  "k5_metric_optimum": true
+}

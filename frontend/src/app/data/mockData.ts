@@ -28,7 +28,7 @@ export const platformMetrics = {
 export const segments: Segment[] = [
   {
     id: 'high-value',
-    name: 'High Value Champions',
+    name: 'High Value Customers',
     color: '#22c55e',
     customers: 2847,
     share: 18.5,
@@ -53,8 +53,8 @@ export const segments: Segment[] = [
     }
   },
   {
-    id: 'data-heavy',
-    name: 'Data Heavy Streamers',
+    id: 'data-driven',
+    name: 'Data Driven Customers',
     color: '#3b82f6',
     customers: 4521,
     share: 29.3,
@@ -79,8 +79,8 @@ export const segments: Segment[] = [
     }
   },
   {
-    id: 'budget',
-    name: 'Budget Conscious',
+    id: 'medium-value',
+    name: 'Medium Value Customers',
     color: '#f59e0b',
     customers: 5234,
     share: 34,
@@ -106,7 +106,7 @@ export const segments: Segment[] = [
   },
   {
     id: 'at-risk',
-    name: 'At Risk Detractors',
+    name: 'At Risk Customers',
     color: '#ef4444',
     customers: 2798,
     share: 18.2,
@@ -153,22 +153,22 @@ export const silhouetteData = [
 ]
 
 export const scatterData = [
-  { x: 55, y: 125, segment: 'High Value Champions', color: '#22c55e' },
-  { x: 50, y: 132, segment: 'High Value Champions', color: '#22c55e' },
-  { x: 44, y: 118, segment: 'High Value Champions', color: '#22c55e' },
-  { x: 48, y: 129, segment: 'High Value Champions', color: '#22c55e' },
-  { x: 62, y: 82, segment: 'Data Heavy Streamers', color: '#3b82f6' },
-  { x: 71, y: 75, segment: 'Data Heavy Streamers', color: '#3b82f6' },
-  { x: 58, y: 79, segment: 'Data Heavy Streamers', color: '#3b82f6' },
-  { x: 66, y: 84, segment: 'Data Heavy Streamers', color: '#3b82f6' },
-  { x: 11, y: 28, segment: 'Budget Conscious', color: '#f59e0b' },
-  { x: 9, y: 35, segment: 'Budget Conscious', color: '#f59e0b' },
-  { x: 7, y: 30, segment: 'Budget Conscious', color: '#f59e0b' },
-  { x: 10, y: 34, segment: 'Budget Conscious', color: '#f59e0b' },
-  { x: 14, y: 42, segment: 'At Risk Detractors', color: '#ef4444' },
-  { x: 18, y: 47, segment: 'At Risk Detractors', color: '#ef4444' },
-  { x: 16, y: 45, segment: 'At Risk Detractors', color: '#ef4444' },
-  { x: 13, y: 41, segment: 'At Risk Detractors', color: '#ef4444' }
+  { x: 55, y: 125, segment: 'High Value Customers', color: '#22c55e' },
+  { x: 50, y: 132, segment: 'High Value Customers', color: '#22c55e' },
+  { x: 44, y: 118, segment: 'High Value Customers', color: '#22c55e' },
+  { x: 48, y: 129, segment: 'High Value Customers', color: '#22c55e' },
+  { x: 62, y: 82, segment: 'Data Driven Customers', color: '#3b82f6' },
+  { x: 71, y: 75, segment: 'Data Driven Customers', color: '#3b82f6' },
+  { x: 58, y: 79, segment: 'Data Driven Customers', color: '#3b82f6' },
+  { x: 66, y: 84, segment: 'Data Driven Customers', color: '#3b82f6' },
+  { x: 11, y: 28, segment: 'Medium Value Customers', color: '#f59e0b' },
+  { x: 9, y: 35, segment: 'Medium Value Customers', color: '#f59e0b' },
+  { x: 7, y: 30, segment: 'Medium Value Customers', color: '#f59e0b' },
+  { x: 10, y: 34, segment: 'Medium Value Customers', color: '#f59e0b' },
+  { x: 14, y: 42, segment: 'At Risk Customers', color: '#ef4444' },
+  { x: 18, y: 47, segment: 'At Risk Customers', color: '#ef4444' },
+  { x: 16, y: 45, segment: 'At Risk Customers', color: '#ef4444' },
+  { x: 13, y: 41, segment: 'At Risk Customers', color: '#ef4444' }
 ]
 
 export const trendData = [

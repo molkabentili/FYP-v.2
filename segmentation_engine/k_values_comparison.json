@@ -1,0 +1,56 @@
+{
+  "2": {
+    "silhouette": 0.1028,
+    "davies_bouldin": 2.7947,
+    "calinski_harabasz": 36.4,
+    "inertia": 6989.11
+  },
+  "3": {
+    "silhouette": 0.0675,
+    "davies_bouldin": 3.4284,
+    "calinski_harabasz": 32.02,
+    "inertia": 6643.99
+  },
+  "4": {
+    "silhouette": 0.0648,
+    "davies_bouldin": 3.0054,
+    "calinski_harabasz": 30.13,
+    "inertia": 6343.85
+  },
+  "5": {
+    "silhouette": 0.0717,
+    "davies_bouldin": 2.8094,
+    "calinski_harabasz": 28.67,
+    "inertia": 6089.32
+  },
+  "6": {
+    "silhouette": 0.0684,
+    "davies_bouldin": 2.7069,
+    "calinski_harabasz": 26.74,
+    "inertia": 5902.67
+  },
+  "7": {
+    "silhouette": 0.0656,
+    "davies_bouldin": 2.4836,
+    "calinski_harabasz": 25.94,
+    "inertia": 5700.17
+  },
+  "8": {
+    "silhouette": 0.0691,
+    "davies_bouldin": 2.4192,
+    "calinski_harabasz": 25.57,
+    "inertia": 5499.18
+  },
+  "9": {
+    "silhouette": 0.07,
+    "davies_bouldin": 2.3461,
+    "calinski_harabasz": 24.53,
+    "inertia": 5358.22
+  },
+  "10": {
+    "silhouette": 0.0586,
+    "davies_bouldin": 2.2708,
+    "calinski_harabasz": 23.35,
+    "inertia": 5248.54
+  }
+}

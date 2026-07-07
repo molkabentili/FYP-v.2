@@ -215,40 +215,110 @@ class SegmentationEngine:
         return metrics
     
     def get_cluster_statistics(self, labels: list[int]) -> dict[str, Any]:
-        """Compute per-cluster statistics.
-        
-        Args:
-            labels: Cluster assignments
-            
-        Returns:
-            Dictionary with cluster size distribution and center info
-        """
+        """Compute distinct per-cluster statistics using real customer metrics."""
         if self.feature_data is None:
             return {}
         
         label_array = np.array(labels)
-        unique_labels = set(labels)
+        unique_labels = sorted(set(labels))
         
         stats = {
             'cluster_sizes': {},
             'cluster_means': {},
-            'cluster_stds': {}
+            'cluster_stds': {},
+            'profiles': {}
         }
         
-        for cluster_id in sorted(unique_labels):
-            if cluster_id == -1:  # Noise in DBSCAN
-                continue
-            
-            mask = label_array == cluster_id
-            cluster_data = self.feature_data[mask]
-            
-            stats['cluster_sizes'][str(cluster_id)] = int(mask.sum())
-            stats['cluster_means'][str(cluster_id)] = cluster_data.mean(axis=0).tolist()
-            stats['cluster_stds'][str(cluster_id)] = cluster_data.std(axis=0).tolist()
+        # Create a copy and attach labels to guarantee correct alignment
+        df_analysis = self.feature_data.copy()
+        df_analysis['current_cluster_assignment'] = label_array
         
+        # Dynamically map standard telecom metrics (case-insensitive)
+        cols = df_analysis.columns
+        arpu_col = next((c for c in cols if 'arpu' in c.lower() or 'revenue' in c.lower() or 'total' in c.lower()), None)
+        data_col = next((c for c in cols if 'data' in c.lower() or 'gb' in c.lower() or 'volume' in c.lower()), None)
+        voice_col = next((c for c in cols if 'voice' in c.lower() or 'min' in c.lower() or 'call' in c.lower()), None)
+        tenure_col = next((c for c in cols if 'tenure' in c.lower() or 'month' in c.lower() or 'age' in c.lower()), None)
+        churn_col = next((c for c in cols if 'churn' in c.lower() or 'risk' in c.lower()), None)
+        
+        computed_profiles = []
+        
+        for cluster_id in unique_labels:
+            if cluster_id == -1:  # Ignore DBSCAN noise for primary profiling
+                continue
+                
+            # Strictly slice data belonging ONLY to this specific cluster
+            cluster_df = df_analysis[df_analysis['current_cluster_assignment'] == cluster_id]
+            drop_cols = ['current_cluster_assignment']
+            cluster_numeric = cluster_df.drop(columns=[c for c in drop_cols if c in cluster_df.columns])
+            
+            means = cluster_numeric.mean(axis=0).to_dict()
+            stds = cluster_numeric.std(axis=0).to_dict()
+            
+            stats['cluster_sizes'][str(cluster_id)] = int(len(cluster_df))
+            stats['cluster_means'][str(cluster_id)] = list(means.values())
+            stats['cluster_stds'][str(cluster_id)] = list(stds.values())
+            
+            computed_profiles.append({
+                'id': str(cluster_id),
+                'size': int(len(cluster_df)),
+                'arpu': means.get(arpu_col, 0.0) if arpu_col else 0.0,
+                'data': means.get(data_col, 0.0) if data_col else 0.0,
+                'voice': means.get(voice_col, 0.0) if voice_col else 0.0,
+                'tenure': means.get(tenure_col, 0.0) if tenure_col else 0.0,
+                'churn_val': means.get(churn_col, 0.0) if churn_col else 0.0
+            })
+            
+        # Raw clustering metadata only. Business names are assigned centrally in
+        # segmentation_engine/api/business_segmentation.py after clustering.
+        if computed_profiles:
+            # Sort to find the actual structural boundaries of your dataset
+            highest_arpu_profile = max(computed_profiles, key=lambda x: x['arpu'])
+            highest_data_profile = max(computed_profiles, key=lambda x: x['data'])
+            lowest_arpu_profile = min(computed_profiles, key=lambda x: x['arpu'])
+            
+            for p in computed_profiles:
+                cid = p['id']
+                name = f"Raw Cluster {cid}"
+                strategy = "Use backend business_segments for campaign strategy."
+                
+                # Rule matrix based on maximum relative metrics
+                if False and cid == highest_arpu_profile['id'] and cid == highest_data_profile['id']:
+                    name = "👑 Premium Data Elite"
+                    strategy = "Introduce premium 5G home streaming bundles and priority customer support lines."
+                elif False and cid == highest_arpu_profile['id']:
+                    name = "💼 High-Value Professionals"
+                    strategy = "Target with value-added corporate roaming packages and postpaid device upgrades."
+                elif False and cid == highest_data_profile['id']:
+                    name = "📱 Digital Enthusiasts"
+                    strategy = "Promote heavy gaming passes, off-peak night bundles, and social media add-ons."
+                elif False and cid == lowest_arpu_profile['id']:
+                    name = "📉 Budget-Conscious Savers"
+                    strategy = "Offer low-cost micro-recharges or targeted voice-only options to drive base migration."
+                elif False:
+                    name = f"🔄 Standard Core (Segment {cid})"
+                    strategy = "Run standard loyalty campaigns and lifestyle balance rewards to secure tenure."
+                
+                # Churn Risk category definition
+                risk_level = "High Risk 🚨" if p['churn_val'] > 0.6 or (p['churn_val'] > 0.3 and p['tenure'] < 6) else ("Medium" if p['churn_val'] > 0.15 else "Low Stability ✅")
+                
+                stats['profiles'][cid] = {
+                    "name": name,
+                    "market_share_pct": round((p['size'] / len(labels)) * 100, 1),
+                    "customer_count": p['size'],
+                    "hero_metrics": {
+                        "ARPU": f"{p['arpu']:.2f} TND",
+                        "Data Usage": f"{p['data']:.2f} GB/mo",
+                        "Voice Traffic": f"{p['voice']:.1f} min/mo",
+                        "Account Tenure": f"{p['tenure']:.1f} months"
+                    },
+                    "risk_assessment": risk_level,
+                    "business_strategy": strategy
+                }
+
         if -1 in unique_labels:
             stats['noise_points'] = int((label_array == -1).sum())
-        
+            
         return stats
     
     def get_all_results(self) -> dict[str, Any]:

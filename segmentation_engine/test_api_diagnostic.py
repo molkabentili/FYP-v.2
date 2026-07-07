@@ -1,0 +1,143 @@
+"""Diagnostic integration tests for the FastAPI API."""
+
+from __future__ import annotations
+
+import os
+import socket
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import pytest
+import requests
+
+
+AUTH_EMAIL = os.getenv("SMARTSEG_AUTH_EMAIL", "analyst@ooredoo.com")
+AUTH_PASSWORD = os.getenv("SMARTSEG_AUTH_PASSWORD", "SmartSeg2026!")
+CUSTOMER_DATA_FILE = Path(__file__).resolve().parent / "test_customer_data.csv"
+
+
+@pytest.fixture(scope="module")
+def api_base_url():
+    host = "127.0.0.1"
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((host, 0))
+        port = sock.getsockname()[1]
+
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "segmentation_engine.api.main:app",
+            "--host",
+            host,
+            "--port",
+            str(port),
+            "--log-level",
+            "warning",
+        ],
+        cwd=Path(__file__).resolve().parent.parent,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    base_url = f"http://{host}:{port}"
+
+    try:
+        deadline = time.monotonic() + 30
+        last_error = None
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                break
+            try:
+                response = requests.get(f"{base_url}/api/health", timeout=1)
+                if response.status_code == 200:
+                    yield base_url
+                    return
+            except requests.RequestException as exc:
+                last_error = exc
+            time.sleep(0.25)
+
+        stdout, stderr = process.communicate(timeout=2)
+        pytest.fail(
+            "FastAPI test server did not start. "
+            f"Last error: {last_error}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+        )
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+
+
+@pytest.fixture(scope="module")
+def api_session(api_base_url):
+    session = requests.Session()
+
+    response = session.get(f"{api_base_url}/api/health", timeout=5)
+    assert response.status_code == 200
+
+    login_response = session.post(
+        f"{api_base_url}/api/auth/login",
+        json={"email": AUTH_EMAIL, "password": AUTH_PASSWORD},
+        timeout=10,
+    )
+    assert login_response.status_code == 200
+
+    token = login_response.json()["access_token"]
+    session.headers.update({"Authorization": f"Bearer {token}"})
+
+    return session
+
+
+def _json_response(response):
+    assert response.headers["content-type"].startswith("application/json")
+    return response.json()
+
+
+def test_health_check_returns_ok(api_session, api_base_url):
+    response = api_session.get(f"{api_base_url}/api/health", timeout=5)
+    result = _json_response(response)
+
+    assert response.status_code == 200
+    assert result["status"] == "healthy"
+    assert result["version"]
+    assert result["message"]
+
+
+def test_direct_clustering_endpoint_is_accessible(api_session, api_base_url):
+    assert CUSTOMER_DATA_FILE.exists(), f"Diagnostic data fixture not found: {CUSTOMER_DATA_FILE}"
+
+    payload = {
+        "algorithm": "kmeans",
+        "preprocessed_file": str(CUSTOMER_DATA_FILE),
+        "n_clusters": 3,
+    }
+
+    response = api_session.post(f"{api_base_url}/api/cluster", json=payload, timeout=30)
+    result = _json_response(response)
+
+    assert response.status_code in {200, 400}
+    assert "success" in result
+    assert response.status_code != 404
+
+    if response.status_code == 200:
+        assert result["success"] is True
+        assert result["algorithm"] == "kmeans"
+        assert result["n_clusters"] == 3
+    else:
+        assert result["success"] is False
+        assert result["error_message"]
+
+
+def test_swagger_documentation_is_available(api_session, api_base_url):
+    response = api_session.get(f"{api_base_url}/docs", timeout=5)
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert len(response.text) > 0
+    assert "Swagger UI" in response.text
